@@ -28,6 +28,8 @@ class Company:
     directors: List[Person] = field(default_factory=list)
     shareholders: List[Person] = field(default_factory=list)
     also_known_as: List[str] = field(default_factory=list)
+    industry: Optional[str] = None  # heuristic guess from name, e.g. "G — Wholesale and retail trade"
+    industry_source: str = "heuristic"  # "heuristic" (name-based guess) or "official" (rare)
     source_url: Optional[str] = None
     fetched_at: Optional[datetime] = None
     confidence: str = "high"  # high, medium, low

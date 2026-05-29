@@ -8,6 +8,7 @@ import requests
 
 from models import Company, Person, SearchResult
 from cache import get_company, save_company, save_search
+from industry_heuristic import infer_industry
 
 logger = logging.getLogger(__name__)
 
