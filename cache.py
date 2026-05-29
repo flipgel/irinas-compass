@@ -23,20 +23,30 @@ def _ensure_db():
             status TEXT,
             registration_date TEXT,
             address TEXT,
-            directors TEXT,  -- JSON list
-            shareholders TEXT,  -- JSON list
-            also_known_as TEXT,  -- JSON list
+            directors TEXT,
+            shareholders TEXT,
+            also_known_as TEXT,
             source_url TEXT,
             fetched_at TEXT,
-            confidence TEXT
+            confidence TEXT,
+            industry TEXT,
+            industry_source TEXT
         )
     """)
+    # Migration: add industry columns to old tables
+    c.execute("PRAGMA table_info(companies)")
+    existing_cols = {row[1] for row in c.fetchall()}
+    if "industry" not in existing_cols:
+        c.execute("ALTER TABLE companies ADD COLUMN industry TEXT")
+    if "industry_source" not in existing_cols:
+        c.execute("ALTER TABLE companies ADD COLUMN industry_source TEXT")
+
     c.execute("""
         CREATE TABLE IF NOT EXISTS search_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             query TEXT,
             query_type TEXT,
-            result_ids TEXT,  -- JSON list of id_codes
+            result_ids TEXT,
             searched_at TEXT,
             from_cache INTEGER
         )
@@ -67,7 +77,11 @@ def save_company(company: Company):
     c = conn.cursor()
     c.execute(
         """
-        INSERT OR REPLACE INTO companies VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO companies
+        (id_code, name, legal_form, status, registration_date, address,
+         directors, shareholders, also_known_as, source_url, fetched_at,
+         confidence, industry, industry_source)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             company.id_code,
@@ -82,6 +96,8 @@ def save_company(company: Company):
             company.source_url,
             company.fetched_at.isoformat() if company.fetched_at else None,
             company.confidence,
+            company.industry,
+            company.industry_source,
         ),
     )
     conn.commit()
@@ -115,6 +131,8 @@ def get_company(id_code: str) -> Optional[Company]:
         source_url=row[9],
         fetched_at=fetched_at,
         confidence=row[11] or "high",
+        industry=row[12],
+        industry_source=row[13] or "heuristic",
     )
 
 

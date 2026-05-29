@@ -4,8 +4,11 @@ import pandas as pd
 from datetime import datetime
 
 from scraper import search_by_vat_id, search_by_company_name, search_by_owner_name
-from cache import get_recent_searches
+from cache import get_recent_searches, _ensure_db
 from models import SearchResult
+
+# Run DB migration on startup (adds industry columns if missing)
+_ensure_db()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  PAGE CONFIG
@@ -632,21 +635,23 @@ if result:
 
             # Industry
             if company.industry:
-                industry_html = f'''
-                <div class="industry-line">
-                    <span class="label">Industry (inferred)</span><br>
-                    <span class="industry-value">{company.industry}</span>
-                </div>'''
+                industry_html = (
+                    '<div class="industry-line">'
+                    '  <span class="label">Industry (inferred)</span><br>'
+                    f'  <span class="industry-value">{company.industry}</span>'
+                    '</div>'
+                )
             else:
-                industry_html = f'''
-                <div class="industry-line">
-                    <span class="label">Industry</span><br>
-                    <span class="industry-missing">Not available in public registry</span>
-                    <span class="industry-links">
-                        &nbsp;· <a href="https://www.bia.ge/" target="_blank">BIA.ge ↗</a>
-                        &nbsp;· <a href="https://rs.ge/" target="_blank">RS.ge ↗</a>
-                    </span>
-                </div>'''
+                industry_html = (
+                    '<div class="industry-line">'
+                    '  <span class="label">Industry</span><br>'
+                    '  <span class="industry-missing">Not available in public registry</span>'
+                    '  <span class="industry-links">'
+                    '    &nbsp;· <a href="https://www.bia.ge/" target="_blank">BIA.ge ↗</a>'
+                    '    &nbsp;· <a href="https://rs.ge/" target="_blank">RS.ge ↗</a>'
+                    '  </span>'
+                    '</div>'
+                )
 
             # Directors section
             directors_html = ""
@@ -655,7 +660,7 @@ if result:
                 for d in company.directors:
                     warn = " <span class='nominee-warning'>— may be nominee</span>" if d.is_nominee_warning else ""
                     rows.append(f"<div class='person-row'>• {d.name}{warn}</div>")
-                directors_html = f'<div class="section-title">Directors & Representatives</div>{"".join(rows)}'
+                directors_html = '<div class="section-title">Directors & Representatives</div>' + "".join(rows)
 
             # Shareholders section
             shareholders_html = ""
@@ -664,32 +669,33 @@ if result:
                 for s in company.shareholders:
                     share_info = f" <span class='person-share'>({s.share_percent}%)</span>" if s.share_percent else ""
                     rows.append(f"<div class='person-row'>• {s.name}{share_info}</div>")
-                shareholders_html = f'<div class="section-title">Owners & Shareholders</div>{"".join(rows)}'
+                shareholders_html = '<div class="section-title">Owners & Shareholders</div>' + "".join(rows)
             elif not company.is_individual_entrepreneur:
                 shareholders_html = '<div class="section-title">Owners & Shareholders</div><div class="person-row" style="color: #8A7E70; font-style: italic;">No shareholder data available in this record.</div>'
 
             # Footer
             fetched_str = company.fetched_at.strftime('%Y-%m-%d %H:%M') if company.fetched_at else 'unknown'
-            footer_html = f'''
-                Source: <a href="{company.source_url}" target="_blank">companyinfo.ge</a>
-                &nbsp;&nbsp;·&nbsp;&nbsp;
-                Fetched: {fetched_str}
-                &nbsp;&nbsp;·&nbsp;&nbsp;
-                <a href="https://enreg.reestri.gov.ge/main.php?c=search&m=search_by_number&n={company.id_code}" target="_blank">Verify on NAPR ↗</a>
-            '''
+            footer_html = (
+                f'Source: <a href="{company.source_url}" target="_blank">companyinfo.ge</a>'
+                f'&nbsp;&nbsp;·&nbsp;&nbsp;'
+                f'Fetched: {fetched_str}'
+                f'&nbsp;&nbsp;·&nbsp;&nbsp;'
+                f'<a href="https://enreg.reestri.gov.ge/main.php?c=search&m=search_by_number&n={company.id_code}" target="_blank">Verify on NAPR ↗</a>'
+            )
 
-            # ── Assemble entire card as ONE HTML block ──
-            card_html = f"""
-            <div class="result-card">
-                <div class="company-title">{company.name}</div>
-                <div class="badge-row">{badges_html}</div>
-                <div class="meta-line">{meta_html}</div>
-                {industry_html}
-                {directors_html}
-                {shareholders_html}
-                <div class="card-footer">{footer_html}</div>
-            </div>
-            """
+            # ── Assemble entire card as ONE HTML block (2-space indent, safe for Markdown) ──
+            card_lines = [
+                '<div class="result-card">',
+                f'  <div class="company-title">{company.name}</div>',
+                f'  <div class="badge-row">{badges_html}</div>',
+                f'  <div class="meta-line">{meta_html}</div>',
+                f'  {industry_html}',
+                f'  {directors_html}',
+                f'  {shareholders_html}',
+                f'  <div class="card-footer">{footer_html}</div>',
+                '</div>',
+            ]
+            card_html = '\n'.join(card_lines)
             st.markdown(card_html, unsafe_allow_html=True)
 
         # ── Disclaimer ──
