@@ -3,9 +3,12 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
+import streamlit.components.v1 as components
+
 from scraper import search_by_vat_id, search_by_company_name, search_by_owner_name
 from cache import get_recent_searches, _ensure_db
 from models import SearchResult
+from network import build_person_network, build_company_network, generate_mermaid
 
 # Run DB migration on startup (adds industry columns if missing)
 _ensure_db()
@@ -461,7 +464,7 @@ with st.sidebar:
 # ═══════════════════════════════════════════════════════════════════════════════
 #  SEARCH TABS
 # ═══════════════════════════════════════════════════════════════════════════════
-tab_vat, tab_company, tab_owner = st.tabs(["By ID Code", "By Company Name", "By Owner Name"])
+tab_vat, tab_company, tab_owner, tab_network = st.tabs(["By ID Code", "By Company Name", "By Owner Name", "🔗 Network"])
 
 
 def do_search(query: str, query_type: str):
@@ -545,6 +548,49 @@ with tab_owner:
         if st.button("Search", key="btn_owner", use_container_width=True):
             if owner_query.strip():
                 do_search(owner_query, "owner_name")
+            else:
+                st.warning("Please enter a name")
+
+
+with tab_network:
+    st.markdown("""
+    <div class="tip-box">
+        <span class="label">Network Analysis</span> &nbsp;Map ownership relationships and detect red flags.
+        Traces person → companies → co-directors (1 hop). Limits API calls to stay polite.
+    </div>
+    """, unsafe_allow_html=True)
+
+    net_mode = st.radio("Start from", ["Person", "Company"], horizontal=True, key="net_mode")
+
+    c1, c2 = st.columns([4, 1])
+    with c1:
+        net_query = st.text_input(
+            "Search",
+            placeholder="ნანა მალენაშვილი  or  Good Shepherd",
+            key="net_input",
+            label_visibility="collapsed",
+        )
+    with c2:
+        st.write("")
+        st.write("")
+        if st.button("Map Network", key="btn_network", use_container_width=True):
+            if net_query.strip():
+                msg = random.choice([
+                    "🍣 Slicing fresh data...",
+                    "🍱 Preparing your bento...",
+                    "🍤 Frying tempura results...",
+                    "🍙 Rolling rice & records...",
+                    "🍥 Spinning the fish cake...",
+                ])
+                with st.spinner(msg):
+                    try:
+                        if net_mode == "Person":
+                            net_result = build_person_network(net_query.strip())
+                        else:
+                            net_result = build_company_network(net_query.strip())
+                        st.session_state["last_network"] = net_result
+                    except Exception as e:
+                        st.error(f"Network analysis failed: {e}")
             else:
                 st.warning("Please enter a name")
 
@@ -710,14 +756,155 @@ if result:
         </div>
         """, unsafe_allow_html=True)
 
-else:
-    # Empty state
+# ═══════════════════════════════════════════════════════════════════════════════
+#  NETWORK DISPLAY
+# ═══════════════════════════════════════════════════════════════════════════════
+net_result = st.session_state.get("last_network")
+
+if net_result:
+    st.divider()
+
+    icon = "🔗" if net_result.query_type == "person" else "◎"
+    st.markdown(
+        f'<div class="results-header">{icon}&nbsp;&nbsp;Network: "{net_result.query}"</div>',
+        unsafe_allow_html=True
+    )
+
+    if net_result.error:
+        st.error(net_result.error)
+    else:
+        # Summary stats
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Companies", len(net_result.companies))
+        with col2:
+            st.metric("Nodes", len(net_result.nodes))
+        with col3:
+            st.metric("Red Flags", len(net_result.risk_flags))
+
+        # Risk flags
+        if net_result.risk_flags:
+            st.markdown('<div class="section-title" style="margin-top:1rem;">Risk Flags</div>', unsafe_allow_html=True)
+            for flag in net_result.risk_flags:
+                st.warning(flag, icon="⚠️")
+
+        # Mermaid diagram
+        if len(net_result.nodes) > 1:
+            mermaid_code = generate_mermaid(net_result)
+            components.html(f"""
+            <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+            <div class="mermaid">
+            {mermaid_code}
+            </div>
+            <script>
+                mermaid.initialize({{
+                    startOnLoad: true,
+                    securityLevel: 'loose',
+                    theme: 'base'
+                }});
+            </script>
+            """, height=500)
+
+        # Detailed company cards (same style as regular results)
+        if net_result.companies:
+            st.markdown('<div class="section-title" style="margin-top:1.5rem;">Company Details</div>', unsafe_allow_html=True)
+            for company in net_result.companies:
+                status_class = {
+                    "Active": "badge-active",
+                    "In Liquidation": "badge-liquidation",
+                    "Terminated": "badge-terminated",
+                    "Suspended": "badge-terminated",
+                }.get(company.status, "badge-medium")
+
+                form_class = "badge-ie" if company.is_individual_entrepreneur else "badge-llc"
+                conf_class = f"badge-{company.confidence}"
+
+                badges = [
+                    f'<span class="badge {form_class}">{company.legal_form}</span>',
+                    f'<span class="badge {status_class}">{company.status}</span>',
+                    f'<span class="badge {conf_class}">{company.confidence}</span>',
+                ]
+                if company.industry and company.industry_source == "heuristic":
+                    badges.append('<span class="badge badge-heuristic">Heuristic</span>')
+                badges_html = " ".join(badges)
+
+                meta_parts = [f"<strong>ID:</strong> {company.id_code}"]
+                if company.registration_date:
+                    meta_parts.append(f"<strong>Registered:</strong> {company.registration_date}")
+                if company.address:
+                    meta_parts.append(f"<strong>Address:</strong> {company.address}")
+                meta_html = "&nbsp;&nbsp;|&nbsp;&nbsp;".join(meta_parts)
+
+                if company.industry:
+                    industry_html = (
+                        '<div class="industry-line">'
+                        '  <span class="label">Industry (inferred)</span><br>'
+                        f'  <span class="industry-value">{company.industry}</span>'
+                        '</div>'
+                    )
+                else:
+                    industry_html = (
+                        '<div class="industry-line">'
+                        '  <span class="label">Industry</span><br>'
+                        '  <span class="industry-missing">Not available in public registry</span>'
+                        '  <span class="industry-links">'
+                        '    &nbsp;· <a href="https://www.bia.ge/" target="_blank">BIA.ge ↗</a>'
+                        '    &nbsp;· <a href="https://rs.ge/" target="_blank">RS.ge ↗</a>'
+                        '  </span>'
+                        '</div>'
+                    )
+
+                directors_html = ""
+                if company.directors:
+                    rows = []
+                    for d in company.directors:
+                        warn = " <span class='nominee-warning'>— may be nominee</span>" if d.is_nominee_warning else ""
+                        rows.append(f"<div class='person-row'>• {d.name}{warn}</div>")
+                    directors_html = '<div class="section-title">Directors & Representatives</div>' + "".join(rows)
+
+                shareholders_html = ""
+                if company.shareholders:
+                    rows = []
+                    for s in company.shareholders:
+                        share_info = f" <span class='person-share'>({s.share_percent}%)</span>" if s.share_percent else ""
+                        rows.append(f"<div class='person-row'>• {s.name}{share_info}</div>")
+                    shareholders_html = '<div class="section-title">Owners & Shareholders</div>' + "".join(rows)
+                elif not company.is_individual_entrepreneur:
+                    shareholders_html = '<div class="section-title">Owners & Shareholders</div><div class="person-row" style="color: #8A7E70; font-style: italic;">No shareholder data available in this record.</div>'
+
+                fetched_str = company.fetched_at.strftime('%Y-%m-%d %H:%M') if company.fetched_at else 'unknown'
+                footer_html = (
+                    f'Source: <a href="{company.source_url}" target="_blank">companyinfo.ge</a>'
+                    f'&nbsp;&nbsp;·&nbsp;&nbsp;'
+                    f'Fetched: {fetched_str}'
+                    f'&nbsp;&nbsp;·&nbsp;&nbsp;'
+                    f'<a href="https://enreg.reestri.gov.ge/main.php?c=search&m=search_by_number&n={company.id_code}" target="_blank">Verify on NAPR ↗</a>'
+                )
+
+                card_lines = [
+                    '<div class="result-card">',
+                    f'  <div class="company-title">{company.name}</div>',
+                    f'  <div class="badge-row">{badges_html}</div>',
+                    f'  <div class="meta-line">{meta_html}</div>',
+                    f'  {industry_html}',
+                    f'  {directors_html}',
+                    f'  {shareholders_html}',
+                    f'  <div class="card-footer">{footer_html}</div>',
+                    '</div>',
+                ]
+                st.markdown('\n'.join(card_lines), unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  EMPTY STATE
+# ═══════════════════════════════════════════════════════════════════════════════
+if not result and not net_result:
     st.markdown("""
     <div class="empty-state">
         <div class="big">Welcome 🍣</div>
         <div style="font-size: 0.82rem; color: #7A7060;">
             Search by company ID, name, or owner to explore the Georgian business registry.<br>
-            Results include directors, shareholders, and an industry estimate.
+            Or use <strong>🔗 Network</strong> to map ownership relationships and spot red flags.
         </div>
     </div>
     """, unsafe_allow_html=True)

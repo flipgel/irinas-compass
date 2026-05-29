@@ -59,3 +59,32 @@ class SearchResult:
     searched_at: datetime = field(default_factory=datetime.now)
     from_cache: bool = False
     error: Optional[str] = None
+
+
+@dataclass
+class NetworkNode:
+    """A node in the ownership network."""
+    node_id: str          # safe ID for Mermaid (no spaces/special chars)
+    label: str            # display label (can have HTML)
+    node_type: str        # "person", "company", "risk_person"
+    details: str = ""     # extra line shown under label
+
+
+@dataclass
+class NetworkEdge:
+    """A relationship between two nodes."""
+    source: str
+    target: str
+    label: str            # e.g. "Director", "Shareholder 51%"
+
+
+@dataclass
+class NetworkResult:
+    """Result of a network analysis."""
+    query: str
+    query_type: str       # "person", "company"
+    nodes: List[NetworkNode] = field(default_factory=list)
+    edges: List[NetworkEdge] = field(default_factory=list)
+    risk_flags: List[str] = field(default_factory=list)
+    companies: List[Company] = field(default_factory=list)
+    error: Optional[str] = None
