@@ -20,6 +20,9 @@ st.set_page_config(
 # ═══════════════════════════════════════════════════════════════════════════════
 #  SUSHI-THEMED CSS — Warm Greyish-Brown Luxury
 # ═══════════════════════════════════════════════════════════════════════════════
+# Cache-busting version: bump this number when CSS changes to force client refresh
+_CSS_VERSION = "2"
+
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
