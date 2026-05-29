@@ -152,15 +152,21 @@ def _parse_company(data: dict, internal_id: int) -> Company:
                 role="Individual Entrepreneur",
             ))
 
+    # Best-effort industry guess from name (Georgian registries don't publish NACE codes)
+    _company_name = corp.get("name", "")
+    _industry = infer_industry(_company_name)
+
     return Company(
         id_code=corp.get("idCode", ""),
-        name=corp.get("name", ""),
+        name=_company_name,
         legal_form=legal_form_en,
         status=_to_en_status(data.get("status", "")),
         registration_date=corp.get("registrationDate", {}).get("date", "").split(" ")[0] if corp.get("registrationDate") else None,
         address=corp.get("address"),
         directors=directors,
         shareholders=shareholders,
+        industry=_industry,
+        industry_source="heuristic",
         source_url=f"https://www.companyinfo.ge/en/corporations/{internal_id}",
         fetched_at=datetime.now(),
         confidence="high",

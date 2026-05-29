@@ -1,3 +1,4 @@
+import random
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -11,102 +12,123 @@ from models import SearchResult
 # ═══════════════════════════════════════════════════════════════════════════════
 st.set_page_config(
     page_title="Irina's Compass · Georgian Business Registry",
-    page_icon="◆",
+    page_icon="🍣",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  HERMÈS-INSPIRED CSS — Quiet Luxury
+#  SUSHI-THEMED CSS — Warm Greyish-Brown Luxury
 # ═══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-    /* ── Global reset ── */
+    /* ── Global ── */
     html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
-        background-color: #F6F1EB !important;
-        color: #000000;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background-color: #B0A494 !important;
+        color: #1A1A1A;
     }
 
-    /* Hide Streamlit chrome */
     #MainMenu, footer, header { visibility: hidden; }
 
-    /* ── Typography ── */
-    .editorial {
-        font-family: 'EB Garamond', serif;
-        font-weight: 400;
-        letter-spacing: -0.01em;
+    /* ── Typography system ── */
+    .h1 {
+        font-family: 'Inter', sans-serif;
+        font-weight: 700;
+        font-size: 3.2rem;
+        letter-spacing: -0.03em;
+        line-height: 1.05;
+        color: #1A1A1A;
+        text-transform: none;
     }
-
     .label {
         font-family: 'Inter', sans-serif;
         font-weight: 500;
-        font-size: 0.65rem;
+        font-size: 0.6rem;
         text-transform: uppercase;
-        letter-spacing: 0.12em;
-        color: #2B333F;
+        letter-spacing: 0.14em;
+        color: #5A5048;
+    }
+    .body {
+        font-family: 'Inter', sans-serif;
+        font-size: 0.9rem;
+        line-height: 1.5;
+        color: #1A1A1A;
+    }
+    .caption {
+        font-family: 'Inter', sans-serif;
+        font-size: 0.75rem;
+        color: #5A5048;
     }
 
     /* ── Hero ── */
     .hero {
         text-align: center;
-        padding: 3.5rem 0 2.5rem 0;
-        border-bottom: 1px solid #E0D8CE;
+        padding: 3rem 0 2rem 0;
+        border-bottom: 1px solid #9E9486;
         margin-bottom: 2rem;
     }
     .hero-title {
-        font-family: 'EB Garamond', serif;
-        font-size: 3rem;
-        font-weight: 400;
-        color: #000000;
-        letter-spacing: -0.02em;
-        line-height: 1.1;
-        margin-bottom: 0.5rem;
+        font-family: 'Inter', sans-serif;
+        font-size: 3.5rem;
+        font-weight: 700;
+        letter-spacing: -0.04em;
+        color: #1A1A1A;
+        line-height: 1.0;
+        margin-bottom: 0.4rem;
     }
     .hero-sub {
         font-family: 'Inter', sans-serif;
-        font-size: 0.9rem;
-        font-weight: 300;
-        color: #2B333F;
-        letter-spacing: 0.02em;
+        font-size: 0.85rem;
+        font-weight: 400;
+        color: #5A5048;
+        letter-spacing: 0.04em;
     }
     .hero-ornament {
-        color: #FF7700;
-        font-size: 0.7rem;
-        letter-spacing: 0.3em;
-        margin-top: 1rem;
+        font-size: 1.2rem;
+        margin-top: 0.8rem;
+        letter-spacing: 0.2em;
     }
 
     /* ── Cards ── */
     .result-card {
         background-color: #FFFCF7;
-        border: 1px solid #E0D8CE;
-        border-radius: 0;
-        padding: 2rem;
-        margin-bottom: 1.5rem;
+        border: 1px solid #C8BEB0;
+        border-radius: 2px;
+        padding: 1.8rem 2rem;
+        margin-bottom: 1.2rem;
     }
-
-    /* ── Badges (pills) ── */
+    .company-title {
+        font-family: 'Inter', sans-serif;
+        font-size: 1.35rem;
+        font-weight: 600;
+        color: #1A1A1A;
+        letter-spacing: -0.01em;
+        margin-bottom: 0.5rem;
+    }
+    .badge-row {
+        margin-bottom: 0.8rem;
+    }
     .badge {
         display: inline-block;
-        padding: 0.15rem 0.5rem;
-        border-radius: 0;
+        padding: 0.2rem 0.55rem;
+        border-radius: 2px;
         font-family: 'Inter', sans-serif;
-        font-size: 0.65rem;
-        font-weight: 500;
+        font-size: 0.6rem;
+        font-weight: 600;
         text-transform: uppercase;
-        letter-spacing: 0.08em;
-        margin-right: 0.5rem;
-        margin-bottom: 0.3rem;
+        letter-spacing: 0.06em;
+        margin-right: 0.4rem;
+        margin-bottom: 0.25rem;
     }
     .badge-active {
-        background-color: #E8F0E8;
+        background-color: #E0E8E0;
         color: #1A4A1A;
     }
     .badge-liquidation {
-        background-color: #F5EDD8;
+        background-color: #F0E8D0;
         color: #7A5C00;
     }
     .badge-terminated {
@@ -121,224 +143,256 @@ st.markdown("""
         background-color: #E0E8F0;
         color: #1A3A7A;
     }
-    .badge-high {
-        background-color: #E8F0E8;
-        color: #1A4A1A;
-    }
-    .badge-medium {
-        background-color: #F5EDD8;
-        color: #7A5C00;
-    }
-    .badge-low {
-        background-color: #F0E0E0;
-        color: #7A1A1A;
-    }
+    .badge-high { background-color: #E0E8E0; color: #1A4A1A; }
+    .badge-medium { background-color: #F0E8D0; color: #7A5C00; }
+    .badge-low { background-color: #F0E0E0; color: #7A1A1A; }
     .badge-heuristic {
-        background-color: #F0EAE0;
-        color: #5A3A1A;
+        background-color: #F5EDE0;
+        color: #6A4A1A;
         border: 1px dashed #D0C4B0;
     }
     .badge-cache {
-        background-color: #F0EDE8;
+        background-color: #E8E4DE;
         color: #5A5548;
     }
 
-    /* ── Section dividers ── */
+    .meta-line {
+        font-size: 0.85rem;
+        color: #5A5048;
+        line-height: 1.6;
+        margin-bottom: 0.6rem;
+    }
+    .meta-line strong {
+        color: #1A1A1A;
+        font-weight: 500;
+    }
+
+    /* ── Sections inside card ── */
     .section-title {
         font-family: 'Inter', sans-serif;
         font-weight: 500;
-        font-size: 0.65rem;
+        font-size: 0.6rem;
         text-transform: uppercase;
-        letter-spacing: 0.12em;
-        color: #2B333F;
-        margin-top: 1.5rem;
-        margin-bottom: 0.6rem;
+        letter-spacing: 0.14em;
+        color: #5A5048;
+        margin-top: 1.2rem;
+        margin-bottom: 0.5rem;
         padding-bottom: 0.3rem;
         border-bottom: 1px solid #E0D8CE;
     }
-
     .person-row {
-        padding: 0.25rem 0;
+        padding: 0.2rem 0;
         font-size: 0.9rem;
-        color: #000000;
+        color: #1A1A1A;
     }
     .person-share {
-        color: #2B333F;
+        color: #5A5048;
         font-size: 0.8rem;
     }
-
     .nominee-warning {
         color: #B07030;
         font-size: 0.75rem;
         font-style: italic;
-        font-family: 'EB Garamond', serif;
-    }
-
-    /* ── Meta / footer within card ── */
-    .card-footer {
-        margin-top: 1.5rem;
-        padding-top: 1rem;
-        border-top: 1px solid #E0D8CE;
-        font-size: 0.75rem;
-        color: #5A5548;
-    }
-    .card-footer a {
-        color: #2B333F;
-        text-decoration: underline;
-        text-underline-offset: 2px;
-    }
-    .card-footer a:hover {
-        color: #FF7700;
     }
 
     /* ── Industry ── */
     .industry-line {
-        margin: 0.8rem 0;
-        font-size: 0.85rem;
-        color: #2B333F;
+        margin: 0.6rem 0;
+        padding: 0.5rem 0;
+        border-top: 1px solid #F0E8E0;
+        border-bottom: 1px solid #F0E8E0;
     }
     .industry-value {
-        color: #000000;
+        font-size: 0.85rem;
+        color: #1A1A1A;
         font-weight: 500;
     }
     .industry-missing {
+        font-size: 0.85rem;
         color: #8A7E70;
         font-style: italic;
-        font-family: 'EB Garamond', serif;
+    }
+    .industry-links {
+        font-size: 0.7rem;
+        color: #8A7E70;
+    }
+    .industry-links a {
+        color: #5A5048;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+    }
+    .industry-links a:hover {
+        color: #E85D4E;
+    }
+
+    /* ── Card footer ── */
+    .card-footer {
+        margin-top: 1.2rem;
+        padding-top: 0.8rem;
+        border-top: 1px solid #E0D8CE;
+        font-size: 0.7rem;
+        color: #8A7E70;
+    }
+    .card-footer a {
+        color: #5A5048;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+    }
+    .card-footer a:hover {
+        color: #E85D4E;
     }
 
     /* ── Disclaimer ── */
     .disclaimer {
-        background-color: #F0EDE8;
-        border-left: 2px solid #2B333F;
+        background-color: #E8E0D8;
+        border-left: 2px solid #5A5048;
         padding: 1rem 1.2rem;
-        border-radius: 0;
-        color: #5A5548;
-        font-size: 0.8rem;
+        border-radius: 2px;
+        color: #5A5048;
+        font-size: 0.78rem;
         margin-top: 2rem;
         line-height: 1.5;
     }
     .disclaimer a {
-        color: #2B333F;
+        color: #1A1A1A;
         text-decoration: underline;
     }
 
     /* ── Tabs ── */
     .stTabs [data-baseweb="tab-list"] {
         gap: 0;
-        border-bottom: 1px solid #E0D8CE;
+        border-bottom: 1px solid #9E9486;
     }
     .stTabs [data-baseweb="tab"] {
         font-family: 'Inter', sans-serif;
         font-weight: 400;
-        font-size: 0.8rem;
+        font-size: 0.75rem;
         text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: #8A7E70;
-        padding: 0.8rem 1.5rem;
+        letter-spacing: 0.1em;
+        color: #7A7060;
+        padding: 0.7rem 1.2rem;
         border-radius: 0;
         border-bottom: 2px solid transparent;
         margin-bottom: -1px;
     }
     .stTabs [aria-selected="true"] {
-        color: #000000 !important;
-        font-weight: 500;
-        border-bottom: 2px solid #FF7700 !important;
+        color: #1A1A1A !important;
+        font-weight: 600;
+        border-bottom: 2px solid #E85D4E !important;
     }
 
     /* ── Inputs ── */
     div[data-baseweb="input"] > div {
-        border-radius: 0 !important;
-        border-color: #C8BEB4 !important;
+        border-radius: 2px !important;
+        border-color: #9E9486 !important;
         background-color: #FFFCF7 !important;
     }
     div[data-baseweb="input"] > div:focus-within {
-        border-color: #000000 !important;
+        border-color: #1A1A1A !important;
+        box-shadow: 0 0 0 1px #1A1A1A !important;
     }
 
-    /* ── Buttons ── */
+    /* ── Primary buttons ── */
     .stButton > button {
-        border-radius: 0 !important;
-        background-color: #000000 !important;
+        border-radius: 2px !important;
+        background-color: #1A1A1A !important;
         color: #FFFCF7 !important;
         font-family: 'Inter', sans-serif;
         font-weight: 500;
-        font-size: 0.75rem;
+        font-size: 0.7rem;
         text-transform: uppercase;
-        letter-spacing: 0.08em;
+        letter-spacing: 0.1em;
         border: none !important;
-        padding: 0.6rem 1.5rem;
+        padding: 0.55rem 1.4rem;
     }
     .stButton > button:hover {
-        background-color: #FF7700 !important;
+        background-color: #E85D4E !important;
         color: #FFFCF7 !important;
     }
     .stButton > button:active {
-        background-color: #CC5F00 !important;
+        background-color: #D44A3B !important;
     }
 
-    /* ── Download button override ── */
+    /* ── Download button ── */
     [data-testid="stDownloadButton"] > button {
-        background-color: #FFFCF7 !important;
-        color: #000000 !important;
-        border: 1px solid #000000 !important;
+        background-color: transparent !important;
+        color: #1A1A1A !important;
+        border: 1px solid #1A1A1A !important;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
     }
     [data-testid="stDownloadButton"] > button:hover {
-        background-color: #000000 !important;
+        background-color: #1A1A1A !important;
         color: #FFFCF7 !important;
-        border-color: #000000 !important;
     }
 
     /* ── Tip box ── */
     .tip-box {
-        background-color: #F0EDE8;
-        border: 1px solid #E0D8CE;
-        padding: 0.8rem 1rem;
-        font-size: 0.85rem;
-        color: #2B333F;
+        background-color: #E8E0D8;
+        border: 1px solid #C8BEB0;
+        padding: 0.7rem 1rem;
+        font-size: 0.82rem;
+        color: #5A5048;
         margin-bottom: 1rem;
+        border-radius: 2px;
     }
 
     /* ── Results header ── */
     .results-header {
-        font-family: 'EB Garamond', serif;
-        font-size: 1.6rem;
-        color: #000000;
-        margin: 2rem 0 1rem 0;
-        padding-bottom: 0.5rem;
-        border-bottom: 1px solid #E0D8CE;
+        font-family: 'Inter', sans-serif;
+        font-size: 1.4rem;
+        font-weight: 600;
+        color: #1A1A1A;
+        margin: 1.5rem 0 1rem 0;
+        padding-bottom: 0.4rem;
+        border-bottom: 1px solid #9E9486;
+        letter-spacing: -0.01em;
     }
 
     /* ── Sidebar ── */
     [data-testid="stSidebar"] {
-        background-color: #F0EDE8 !important;
-        border-right: 1px solid #E0D8CE;
+        background-color: #A89888 !important;
+        border-right: 1px solid #9E9486;
     }
     [data-testid="stSidebar"] .stButton > button {
         background-color: transparent !important;
-        color: #2B333F !important;
-        border: 1px solid #C8BEB4 !important;
+        color: #1A1A1A !important;
+        border: 1px solid #8A7E6E !important;
         text-align: left;
-        font-size: 0.75rem;
+        font-size: 0.72rem;
         text-transform: none;
         letter-spacing: 0.02em;
-        padding: 0.4rem 0.8rem;
+        padding: 0.35rem 0.7rem;
     }
     [data-testid="stSidebar"] .stButton > button:hover {
-        background-color: #E0D8CE !important;
-        color: #000000 !important;
+        background-color: #C8BEB0 !important;
+        color: #1A1A1A !important;
     }
 
     /* ── Empty state ── */
     .empty-state {
         text-align: center;
         padding: 4rem 2rem;
-        color: #8A7E70;
+        color: #7A7060;
     }
-    .empty-state .editorial {
-        font-size: 1.3rem;
-        margin-bottom: 0.5rem;
-        color: #2B333F;
+    .empty-state .big {
+        font-size: 1.2rem;
+        font-weight: 500;
+        margin-bottom: 0.4rem;
+        color: #5A5048;
+    }
+
+    /* ── Spinner custom color ── */
+    .stSpinner > div > div > div {
+        border-top-color: #E85D4E !important;
+    }
+    .stSpinner > div > div {
+        color: #5A5048 !important;
+        font-family: 'Inter', sans-serif !important;
+        font-size: 0.8rem !important;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -349,9 +403,9 @@ st.markdown("""
 # ═══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <div class="hero">
-    <div class="hero-title editorial">Irina's Compass</div>
+    <div class="hero-title">Irina's Compass</div>
     <div class="hero-sub">Georgian Business Registry — Ownership, Directors & Industry</div>
-    <div class="hero-ornament">◆ ◆ ◆</div>
+    <div class="hero-ornament">🍣 🍱 🍤</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -360,9 +414,9 @@ st.markdown("""
 #  SIDEBAR
 # ═══════════════════════════════════════════════════════════════════════════════
 with st.sidebar:
-    st.markdown('<div style="font-family: EB Garamond; font-size: 1.4rem; color: #000; margin-bottom: 0.2rem;">Irina\'s Compass</div>', unsafe_allow_html=True)
-    st.markdown('<div style="font-size: 0.75rem; color: #5A5548; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 1.5rem;">Georgian Business Lookup</div>', unsafe_allow_html=True)
-    st.markdown('<div class="label" style="margin-bottom: 0.8rem;">Recent Searches</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-family: Inter; font-size: 1.3rem; font-weight: 700; color: #1A1A1A; margin-bottom: 0.2rem; letter-spacing: -0.02em;">Irina\'s Compass</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size: 0.68rem; color: #5A5048; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 1.5rem;">Georgian Business Lookup</div>', unsafe_allow_html=True)
+    st.markdown('<div class="label" style="margin-bottom: 0.6rem;">Recent Searches</div>', unsafe_allow_html=True)
 
     recent = get_recent_searches(limit=12)
     if not recent:
@@ -372,7 +426,13 @@ with st.sidebar:
             icon = {"vat_id": "#", "company_name": "◎", "owner_name": "◈"}.get(r.query_type, "◇")
             label = f"{icon}  {r.query[:32]}"
             if st.button(label, key=f"recent_{idx}_{r.query_type}", use_container_width=True):
-                with st.spinner("Searching..."):
+                with st.spinner(random.choice([
+                    "🍣 Slicing fresh data...",
+                    "🍱 Preparing your bento...",
+                    "🍤 Frying tempura results...",
+                    "🍙 Rolling rice & records...",
+                    "🍥 Spinning the fish cake...",
+                ])):
                     try:
                         if r.query_type == "vat_id":
                             result = search_by_vat_id(r.query.strip())
@@ -385,10 +445,9 @@ with st.sidebar:
                         st.error(f"Search failed: {e}")
 
     st.markdown("""
-    <div style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #D0C8BE; font-size: 0.7rem; color: #8A7E70; line-height: 1.5;">
-        Data: <a href="https://www.companyinfo.ge" target="_blank" style="color: #2B333F;">companyinfo.ge</a> (TI Georgia)<br>
-        Cache: 7 days<br>
-        <a href="https://github.com/flipgel/irinas-compass" target="_blank" style="color: #2B333F;">GitHub ↗</a>
+    <div style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #9E9486; font-size: 0.68rem; color: #7A7060; line-height: 1.5;">
+        Data: <a href="https://www.companyinfo.ge" target="_blank" style="color: #5A5048;">companyinfo.ge</a> (TI Georgia)<br>
+        Cache: 7 days · <a href="https://github.com/flipgel/irinas-compass" target="_blank" style="color: #5A5048;">GitHub ↗</a>
     </div>
     """, unsafe_allow_html=True)
 
@@ -400,7 +459,14 @@ tab_vat, tab_company, tab_owner = st.tabs(["By ID Code", "By Company Name", "By 
 
 
 def do_search(query: str, query_type: str):
-    with st.spinner("Searching Georgian registry..."):
+    msg = random.choice([
+        "🍣 Slicing fresh data...",
+        "🍱 Preparing your bento...",
+        "🍤 Frying tempura results...",
+        "🍙 Rolling rice & records...",
+        "🍥 Spinning the fish cake...",
+    ])
+    with st.spinner(msg):
         try:
             if query_type == "vat_id":
                 result = search_by_vat_id(query.strip())
@@ -455,8 +521,7 @@ with tab_owner:
     st.markdown("""
     <div class="tip-box">
         <span class="label">Tip</span> &nbsp;Type the owner's name in <strong>Georgian script</strong>
-        (e.g. <em style="font-family: EB Garamond;">ნანა მალენაშვილი</em>).
-        The API does not support Latin transliterations.
+        (e.g. <em>ნანა მალენაშვილი</em>). The API does not support Latin transliterations.
     </div>
     """, unsafe_allow_html=True)
 
@@ -488,7 +553,7 @@ if result:
 
     icon = {"vat_id": "#", "company_name": "◎", "owner_name": "◈"}.get(result.query_type, "◇")
     st.markdown(
-        f'<div class="results-header editorial">{icon}&nbsp;&nbsp;Results for "{result.query}"</div>',
+        f'<div class="results-header">{icon}&nbsp;&nbsp;Results for "{result.query}"</div>',
         unsafe_allow_html=True
     )
 
@@ -542,74 +607,87 @@ if result:
             form_class = "badge-ie" if company.is_individual_entrepreneur else "badge-llc"
             conf_class = f"badge-{company.confidence}"
 
-            # Build meta HTML
-            meta_parts = [f'<span class="badge {form_class}">{company.legal_form}</span>']
-            meta_parts.append(f'<span class="badge {status_class}">{company.status}</span>')
-            meta_parts.append(f'<span class="badge {conf_class}">{company.confidence} confidence</span>')
+            # Build badges
+            badges = [
+                f'<span class="badge {form_class}">{company.legal_form}</span>',
+                f'<span class="badge {status_class}">{company.status}</span>',
+                f'<span class="badge {conf_class}">{company.confidence}</span>',
+            ]
             if result.from_cache:
-                meta_parts.append('<span class="badge badge-cache">Cached</span>')
+                badges.append('<span class="badge badge-cache">Cached</span>')
             if company.industry and company.industry_source == "heuristic":
-                meta_parts.append('<span class="badge badge-heuristic">Heuristic</span>')
+                badges.append('<span class="badge badge-heuristic">Heuristic</span>')
+            badges_html = " ".join(badges)
 
-            meta_html = " ".join(meta_parts)
-
-            # Registration / address line
-            reg_line = f"""
-                <strong>ID:</strong> {company.id_code}
-                {f'&nbsp;&nbsp;|&nbsp;&nbsp;<strong>Registered:</strong> {company.registration_date}' if company.registration_date else ''}
-                {f'&nbsp;&nbsp;|&nbsp;&nbsp;<strong>Address:</strong> {company.address}' if company.address else ''}
-            """
+            # Meta line
+            meta_parts = [f"<strong>ID:</strong> {company.id_code}"]
+            if company.registration_date:
+                meta_parts.append(f"<strong>Registered:</strong> {company.registration_date}")
+            if company.address:
+                meta_parts.append(f"<strong>Address:</strong> {company.address}")
+            meta_html = "&nbsp;&nbsp;|&nbsp;&nbsp;".join(meta_parts)
 
             # Industry
             if company.industry:
-                industry_html = f'<div class="industry-line"><span class="label">Industry (inferred)</span><br><span class="industry-value">{company.industry}</span></div>'
+                industry_html = f'''
+                <div class="industry-line">
+                    <span class="label">Industry (inferred)</span><br>
+                    <span class="industry-value">{company.industry}</span>
+                </div>'''
             else:
-                industry_html = f'''<div class="industry-line">
+                industry_html = f'''
+                <div class="industry-line">
                     <span class="label">Industry</span><br>
                     <span class="industry-missing">Not available in public registry</span>
-                    <span style="font-size: 0.75rem; color: #8A7E70;">
-                        &nbsp;· <a href="https://www.bia.ge/" target="_blank">Check BIA.ge ↗</a>
+                    <span class="industry-links">
+                        &nbsp;· <a href="https://www.bia.ge/" target="_blank">BIA.ge ↗</a>
                         &nbsp;· <a href="https://rs.ge/" target="_blank">RS.ge ↗</a>
                     </span>
                 </div>'''
 
-            st.markdown(f"""
-            <div class="result-card">
-                <div class="editorial" style="font-size: 1.5rem; color: #000; margin-bottom: 0.4rem;">{company.name}</div>
-                <div style="margin-bottom: 0.6rem;">{meta_html}</div>
-                <div style="font-size: 0.85rem; color: #2B333F; line-height: 1.5;">
-                    {reg_line}
-                </div>
-                {industry_html}
-            </div>
-            """, unsafe_allow_html=True)
-
             # Directors section
+            directors_html = ""
             if company.directors:
-                st.markdown('<div class="section-title">Directors & Representatives</div>', unsafe_allow_html=True)
+                rows = []
                 for d in company.directors:
                     warn = " <span class='nominee-warning'>— may be nominee</span>" if d.is_nominee_warning else ""
-                    st.markdown(f"<div class='person-row'>◆&nbsp;&nbsp;{d.name}{warn}</div>", unsafe_allow_html=True)
+                    rows.append(f"<div class='person-row'>• {d.name}{warn}</div>")
+                directors_html = f'<div class="section-title">Directors & Representatives</div>{"".join(rows)}'
 
             # Shareholders section
+            shareholders_html = ""
             if company.shareholders:
-                st.markdown('<div class="section-title">Owners & Shareholders</div>', unsafe_allow_html=True)
+                rows = []
                 for s in company.shareholders:
                     share_info = f" <span class='person-share'>({s.share_percent}%)</span>" if s.share_percent else ""
-                    st.markdown(f"<div class='person-row'>◆&nbsp;&nbsp;{s.name}{share_info}</div>", unsafe_allow_html=True)
+                    rows.append(f"<div class='person-row'>• {s.name}{share_info}</div>")
+                shareholders_html = f'<div class="section-title">Owners & Shareholders</div>{"".join(rows)}'
             elif not company.is_individual_entrepreneur:
-                st.markdown("<div class='person-row' style='color: #8A7E70; font-style: italic; font-family: EB Garamond;'>No shareholder data available in this record.</div>", unsafe_allow_html=True)
+                shareholders_html = '<div class="section-title">Owners & Shareholders</div><div class="person-row" style="color: #8A7E70; font-style: italic;">No shareholder data available in this record.</div>'
 
-            # Card footer with source & verification links
-            st.markdown(f"""
-            <div class="card-footer">
+            # Footer
+            fetched_str = company.fetched_at.strftime('%Y-%m-%d %H:%M') if company.fetched_at else 'unknown'
+            footer_html = f'''
                 Source: <a href="{company.source_url}" target="_blank">companyinfo.ge</a>
                 &nbsp;&nbsp;·&nbsp;&nbsp;
-                Fetched: {company.fetched_at.strftime('%Y-%m-%d %H:%M') if company.fetched_at else 'unknown'}
+                Fetched: {fetched_str}
                 &nbsp;&nbsp;·&nbsp;&nbsp;
                 <a href="https://enreg.reestri.gov.ge/main.php?c=search&m=search_by_number&n={company.id_code}" target="_blank">Verify on NAPR ↗</a>
+            '''
+
+            # ── Assemble entire card as ONE HTML block ──
+            card_html = f"""
+            <div class="result-card">
+                <div class="company-title">{company.name}</div>
+                <div class="badge-row">{badges_html}</div>
+                <div class="meta-line">{meta_html}</div>
+                {industry_html}
+                {directors_html}
+                {shareholders_html}
+                <div class="card-footer">{footer_html}</div>
             </div>
-            """, unsafe_allow_html=True)
+            """
+            st.markdown(card_html, unsafe_allow_html=True)
 
         # ── Disclaimer ──
         st.markdown("""
@@ -627,8 +705,8 @@ else:
     # Empty state
     st.markdown("""
     <div class="empty-state">
-        <div class="editorial">Welcome</div>
-        <div style="font-size: 0.85rem; color: #8A7E70;">
+        <div class="big">Welcome 🍣</div>
+        <div style="font-size: 0.82rem; color: #7A7060;">
             Search by company ID, name, or owner to explore the Georgian business registry.<br>
             Results include directors, shareholders, and an industry estimate.
         </div>
