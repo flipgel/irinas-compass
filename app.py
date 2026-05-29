@@ -5,7 +5,6 @@ from datetime import datetime
 from scraper import search_by_vat_id, search_by_company_name, search_by_owner_name
 from cache import get_recent_searches
 from models import SearchResult
-from transliteration import latin_to_georgian, is_georgian_script
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -148,37 +147,6 @@ st.markdown("""
         margin-top: 1rem;
     }
     
-    .warning-box {
-        background-color: #FFF8E7;
-        border: 1px solid #E8C87A;
-        border-radius: 8px;
-        padding: 1rem;
-        color: #7A5C1A;
-        font-size: 0.9rem;
-        margin-bottom: 1rem;
-    }
-    
-    .info-box {
-        background-color: #E8F4F0;
-        border: 1px solid #7AB8A8;
-        border-radius: 8px;
-        padding: 1rem;
-        color: #1A5A4A;
-        font-size: 0.9rem;
-        margin-bottom: 1rem;
-    }
-    
-    .georgian-preview {
-        background-color: #F8F5F0;
-        border: 1px solid #D4C4B0;
-        border-radius: 8px;
-        padding: 0.8rem 1rem;
-        font-size: 1.1rem;
-        color: #5D2E1F;
-        font-family: 'Inter', sans-serif;
-        margin-top: 0.5rem;
-    }
-    
     .stTabs [data-baseweb="tab-list"] {
         gap: 2rem;
     }
@@ -208,9 +176,7 @@ with st.sidebar:
         for idx, r in enumerate(recent):
             icon = {"vat_id": "🔢", "company_name": "🏢", "owner_name": "👤"}.get(r.query_type, "🔍")
             label = f"{icon} {r.query[:28]}"
-            # Use a unique key based on index to avoid key conflicts
             if st.button(label, key=f"recent_{idx}_{r.query_type}", use_container_width=True):
-                # Directly run the search instead of messing with widget state
                 with st.spinner("Searching..."):
                     try:
                         if r.query_type == "vat_id":
@@ -292,45 +258,23 @@ with tab_company:
 # ── Tab 3: Owner Name ────────────────────────────────────────────────────────
 with tab_owner:
     st.markdown("""
-    <div class="info-box">
-        💡 <strong>Tip:</strong> Type in Latin letters and the app will auto-convert to Georgian. 
-        Example: type <em>"nana malenashvili"</em> and it becomes <em>"ნანა მალენაშვილი"</em>.
+    <div style="background-color: #F5F0EB; border-radius: 8px; padding: 0.8rem 1rem; color: #6B5B4F; font-size: 0.9rem; margin-bottom: 1rem;">
+        💡 <strong>Tip:</strong> Type the owner's name in <strong>Georgian script</strong> (e.g. <em>ნანა მალენაშვილი</em>).
     </div>
     """, unsafe_allow_html=True)
     
-    # Transliteration toggle
-    auto_translit = st.toggle("Auto-convert Latin → Georgian", value=True, key="translit_toggle")
-    
     c1, c2 = st.columns([3, 1])
     with c1:
-        owner_query_raw = st.text_input(
-            "Enter Owner Name",
-            placeholder="e.g. nana malenashvili or ნანა მალენაშვილი",
+        owner_query = st.text_input(
+            "Enter Owner Name (Georgian script)",
+            placeholder="e.g. ნანა მალენაშვილი",
             key="owner_input",
         )
-        
-        # Determine the actual query to send
-        owner_query = ""
-        if owner_query_raw:
-            if is_georgian_script(owner_query_raw):
-                owner_query = owner_query_raw.strip()
-                st.caption("✓ Detected Georgian script")
-            elif auto_translit:
-                owner_query = latin_to_georgian(owner_query_raw).strip()
-                if owner_query and owner_query != owner_query_raw.strip():
-                    st.markdown(f'<div class="georgian-preview">🇬🇪 {owner_query}</div>', unsafe_allow_html=True)
-                elif not owner_query:
-                    owner_query = owner_query_raw.strip()
-                    st.caption("⚠️ Could not transliterate")
-            else:
-                owner_query = owner_query_raw.strip()
-                st.caption("⚠️ Latin input — may not find results. Toggle auto-convert above.")
-    
     with c2:
         st.write("")
         st.write("")
         if st.button("Search", key="btn_owner", use_container_width=True):
-            if owner_query:
+            if owner_query.strip():
                 do_search(owner_query, "owner_name")
             else:
                 st.warning("Please enter a name")

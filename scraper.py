@@ -218,17 +218,30 @@ def search_by_company_name(name: str) -> SearchResult:
 
 
 def search_by_owner_name(name: str) -> SearchResult:
-    """Reverse search: find all companies linked to a person by name.
-    
-    IMPORTANT: The API only accepts Georgian-script names. Latin names
-    will return 0 results. The UI should warn about this.
-    """
+    """Reverse search: find all companies linked to a person by name."""
     result = SearchResult(query=name, query_type="owner_name")
-    data = _get_json("/people/search", {"name": name, "page": 1})
+    
+    # Debug: log what we're sending
+    logger.info(f"Searching people by name: '{name}' (len={len(name)}, bytes={name.encode('utf-8')!r})")
+    
+    try:
+        data = _get_json("/people/search", {"name": name, "page": 1})
+    except Exception as e:
+        logger.error(f"API call failed for people search: {e}")
+        result.error = f"API request failed: {e}"
+        save_search(result)
+        return result
+    
     items = data.get("items", [])
+    total_items = data.get("totalItems", 0)
+    logger.info(f"People search returned {total_items} total items, {len(items)} in this page")
 
     if not items:
-        result.error = "No people found. The companyinfo.ge API requires Georgian-script names for person search. Try searching by VAT ID or company name first, then use the Georgian name for reverse lookup."
+        result.error = (
+            f"No people found for '{name}'. "
+            "The companyinfo.ge API requires Georgian-script names for person search. "
+            "Try searching by VAT ID or company name first to discover the correct Georgian spelling."
+        )
         save_search(result)
         return result
 
@@ -239,7 +252,13 @@ def search_by_owner_name(name: str) -> SearchResult:
         if not person_id:
             continue
         
-        person_detail = _get_json(f"/people/{person_id}")
+        logger.info(f"Fetching person detail for id={person_id}, name='{person_item.get('name')}'")
+        
+        try:
+            person_detail = _get_json(f"/people/{person_id}")
+        except Exception as e:
+            logger.warning(f"Failed to fetch person {person_id}: {e}")
+            continue
         
         # Affiliations = director roles
         for aff in person_detail.get("affiliations", []):
