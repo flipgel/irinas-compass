@@ -168,18 +168,6 @@ st.markdown("""
         margin-bottom: 1rem;
     }
     
-    .recent-item {
-        padding: 0.5rem 0.8rem;
-        margin-bottom: 0.3rem;
-        border-radius: 6px;
-        cursor: pointer;
-        transition: background 0.2s;
-    }
-    
-    .recent-item:hover {
-        background-color: #F5F0EB;
-    }
-    
     .georgian-preview {
         background-color: #F8F5F0;
         border: 1px solid #D4C4B0;
@@ -217,13 +205,23 @@ with st.sidebar:
     if not recent:
         st.caption("No searches yet. Start above!")
     else:
-        for r in recent:
+        for idx, r in enumerate(recent):
             icon = {"vat_id": "🔢", "company_name": "🏢", "owner_name": "👤"}.get(r.query_type, "🔍")
             label = f"{icon} {r.query[:28]}"
-            if st.button(label, key=f"recent_{r.searched_at.isoformat()}_{r.query}", use_container_width=True):
-                st.session_state["search_query"] = r.query
-                st.session_state["search_type"] = r.query_type
-                st.rerun()
+            # Use a unique key based on index to avoid key conflicts
+            if st.button(label, key=f"recent_{idx}_{r.query_type}", use_container_width=True):
+                # Directly run the search instead of messing with widget state
+                with st.spinner("Searching..."):
+                    try:
+                        if r.query_type == "vat_id":
+                            result = search_by_vat_id(r.query.strip())
+                        elif r.query_type == "company_name":
+                            result = search_by_company_name(r.query.strip())
+                        else:
+                            result = search_by_owner_name(r.query.strip())
+                        st.session_state["last_result"] = result
+                    except Exception as e:
+                        st.error(f"Search failed: {e}")
     
     st.divider()
     st.markdown("""
@@ -252,8 +250,6 @@ def do_search(query: str, query_type: str):
             else:
                 result = search_by_owner_name(query.strip())
             st.session_state["last_result"] = result
-            st.session_state["search_query"] = query
-            st.session_state["search_type"] = query_type
         except Exception as e:
             st.error(f"Search failed: {e}")
 
@@ -264,7 +260,6 @@ with tab_vat:
         vat_query = st.text_input(
             "Enter VAT or Company ID",
             placeholder="e.g. 404447924 (9 digits for LLC, 11 for individual)",
-            value=st.session_state.get("search_query", "") if st.session_state.get("search_type") == "vat_id" else "",
             key="vat_input",
         )
     with c2:
@@ -283,7 +278,6 @@ with tab_company:
         company_query = st.text_input(
             "Enter Company or Restaurant Name",
             placeholder="e.g. Good Shepherd or შპს არბითიეს გრუფი",
-            value=st.session_state.get("search_query", "") if st.session_state.get("search_type") == "company_name" else "",
             key="company_input",
         )
     with c2:
@@ -312,32 +306,31 @@ with tab_owner:
         owner_query_raw = st.text_input(
             "Enter Owner Name",
             placeholder="e.g. nana malenashvili or ნანა მალენაშვილი",
-            value=st.session_state.get("search_query", "") if st.session_state.get("search_type") == "owner_name" else "",
             key="owner_input",
         )
         
-        # Live Georgian preview
+        # Determine the actual query to send
+        owner_query = ""
         if owner_query_raw:
             if is_georgian_script(owner_query_raw):
-                owner_query = owner_query_raw
+                owner_query = owner_query_raw.strip()
                 st.caption("✓ Detected Georgian script")
             elif auto_translit:
-                owner_query = latin_to_georgian(owner_query_raw)
-                if owner_query != owner_query_raw:
+                owner_query = latin_to_georgian(owner_query_raw).strip()
+                if owner_query and owner_query != owner_query_raw.strip():
                     st.markdown(f'<div class="georgian-preview">🇬🇪 {owner_query}</div>', unsafe_allow_html=True)
-                else:
-                    owner_query = owner_query_raw
+                elif not owner_query:
+                    owner_query = owner_query_raw.strip()
+                    st.caption("⚠️ Could not transliterate")
             else:
-                owner_query = owner_query_raw
+                owner_query = owner_query_raw.strip()
                 st.caption("⚠️ Latin input — may not find results. Toggle auto-convert above.")
-        else:
-            owner_query = ""
     
     with c2:
         st.write("")
         st.write("")
         if st.button("Search", key="btn_owner", use_container_width=True):
-            if owner_query.strip():
+            if owner_query:
                 do_search(owner_query, "owner_name")
             else:
                 st.warning("Please enter a name")
