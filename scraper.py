@@ -238,9 +238,11 @@ def search_by_owner_name(name: str) -> SearchResult:
 
     if not items:
         result.error = (
-            f"No people found for '{name}'. "
-            "The companyinfo.ge API requires Georgian-script names for person search. "
-            "Try searching by VAT ID or company name first to discover the correct Georgian spelling."
+            f"No people found for '{name}'.\n\n"
+            "Possible reasons:\n"
+            "• The name may be spelled differently in the registry\n"
+            "• The person may not be registered as a director or shareholder\n"
+            "• Try searching by company name or VAT ID first, then check the owner name in the result"
         )
         save_search(result)
         return result
