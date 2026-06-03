@@ -9,6 +9,7 @@ from scraper import search_by_vat_id, search_by_company_name, search_by_owner_na
 from cache import get_recent_searches, _ensure_db
 from models import SearchResult
 from network import build_person_network, build_company_network, generate_mermaid
+from gov_links import gov_links_for
 
 # Run DB migration on startup (adds industry columns if missing)
 _ensure_db()
@@ -232,6 +233,42 @@ st.markdown("""
     }
     .industry-links a:hover {
         color: #E85D4E;
+    }
+
+    /* ── Government documents ── */
+    .gov-docs {
+        margin-top: 1rem;
+        padding: 0.8rem 1rem;
+        background-color: #F5F0E8;
+        border: 1px solid #D8CFC0;
+        border-radius: 2px;
+    }
+    .gov-docs-title {
+        font-family: 'Inter', sans-serif;
+        font-weight: 500;
+        font-size: 0.6rem;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: #5A5048;
+        margin-bottom: 0.5rem;
+    }
+    .gov-doc-link {
+        display: inline-block;
+        margin-right: 0.6rem;
+        margin-bottom: 0.3rem;
+        font-size: 0.75rem;
+        color: #1A1A1A;
+        text-decoration: none;
+        padding: 0.35rem 0.7rem;
+        background-color: #FFFCF7;
+        border: 1px solid #C8BEB0;
+        border-radius: 2px;
+        transition: background-color 0.15s, border-color 0.15s;
+    }
+    .gov-doc-link:hover {
+        background-color: #E85D4E;
+        color: #FFFCF7;
+        border-color: #E85D4E;
     }
 
     /* ── Card footer ── */
@@ -719,6 +756,16 @@ if result:
             elif not company.is_individual_entrepreneur:
                 shareholders_html = '<div class="section-title">Owners & Shareholders</div><div class="person-row" style="color: #8A7E70; font-style: italic;">No shareholder data available in this record.</div>'
 
+            # Government documents
+            gov = gov_links_for(company.id_code)
+            gov_docs_html = (
+                '<div class="gov-docs">'
+                '  <div class="gov-docs-title">Official Government Documents</div>'
+                f'  <a class="gov-doc-link" href="{gov["napr_en"]}" target="_blank">📄 NAPR Extract (PDF)</a>'
+                f'  <a class="gov-doc-link" href="{gov["mygov"]}" target="_blank">📄 my.gov.ge Decisions</a>'
+                '</div>'
+            )
+
             # Footer
             fetched_str = company.fetched_at.strftime('%Y-%m-%d %H:%M') if company.fetched_at else 'unknown'
             footer_html = (
@@ -738,6 +785,7 @@ if result:
                 f'  {industry_html}',
                 f'  {directors_html}',
                 f'  {shareholders_html}',
+                f'  {gov_docs_html}',
                 f'  <div class="card-footer">{footer_html}</div>',
                 '</div>',
             ]
@@ -872,6 +920,15 @@ if net_result:
                 elif not company.is_individual_entrepreneur:
                     shareholders_html = '<div class="section-title">Owners & Shareholders</div><div class="person-row" style="color: #8A7E70; font-style: italic;">No shareholder data available in this record.</div>'
 
+                gov = gov_links_for(company.id_code)
+                gov_docs_html = (
+                    '<div class="gov-docs">'
+                    '  <div class="gov-docs-title">Official Government Documents</div>'
+                    f'  <a class="gov-doc-link" href="{gov["napr_en"]}" target="_blank">📄 NAPR Extract (PDF)</a>'
+                    f'  <a class="gov-doc-link" href="{gov["mygov"]}" target="_blank">📄 my.gov.ge Decisions</a>'
+                    '</div>'
+                )
+
                 fetched_str = company.fetched_at.strftime('%Y-%m-%d %H:%M') if company.fetched_at else 'unknown'
                 footer_html = (
                     f'Source: <a href="{company.source_url}" target="_blank">companyinfo.ge</a>'
@@ -889,6 +946,7 @@ if net_result:
                     f'  {industry_html}',
                     f'  {directors_html}',
                     f'  {shareholders_html}',
+                    f'  {gov_docs_html}',
                     f'  <div class="card-footer">{footer_html}</div>',
                     '</div>',
                 ]
