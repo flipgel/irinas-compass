@@ -760,12 +760,10 @@ if result:
             gov = gov_links_for(company.id_code)
             gov_docs_html = (
                 '<div class="gov-docs">'
-                '  <div class="gov-docs-title">Official Government Documents</div>'
-                f'  <a class="gov-doc-link" href="{gov["napr"]}" target="_blank">📄 NAPR Extract (PDF)</a>'
-                f'  <a class="gov-doc-link" href="{gov["mygov"]}" target="_blank">📄 my.gov.ge Decisions</a>'
+                '  <div class="gov-docs-title">Official Government Document</div>'
+                f'  <a class="gov-doc-link" href="{gov["napr"]}" target="_blank">📄 NAPR Registry Extract</a>'
                 '  <div style="font-size:0.7rem;color:#8A7E70;margin-top:0.4rem;line-height:1.4;">'
-                '    NAPR requires a quick CAPTCHA to view details & download the PDF.<br>'
-                '    my.gov.ge requires a government account login.'
+                '    Click to open the official NAPR search results, then complete the quick CAPTCHA to view the company details and download the latest PDF extract.'
                 '  </div>'
                 '</div>'
             )
