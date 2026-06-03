@@ -46,8 +46,8 @@ def fetch_napr_search(id_code: str) -> Optional[NaprResult]:
     resp = session.get(url, timeout=15)
     resp.encoding = "utf-8"  # server omits charset; force UTF-8
 
-    # Extract table rows with company data
-    rows = re.findall(r'<tr[^>]*bgcolor="#ffffff"[^>]*>(.*?)</tr>', resp.text, re.DOTALL)
+    # Extract table rows with company data (case-insensitive: NAPR uses #FFFFFF or #ffffff)
+    rows = re.findall(r'<tr[^>]*bgcolor="#ffffff"[^>]*>(.*?)</tr>', resp.text, re.DOTALL | re.IGNORECASE)
     if not rows:
         return None
 

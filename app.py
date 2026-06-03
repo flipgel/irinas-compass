@@ -1,9 +1,15 @@
+import html
 import random
 import streamlit as st
 import pandas as pd
 from datetime import datetime
 
 import streamlit.components.v1 as components
+
+
+def _h(text: str) -> str:
+    """HTML-escape user content before injecting into rendered HTML."""
+    return html.escape(str(text) if text is not None else "")
 
 from scraper import search_by_vat_id, search_by_company_name, search_by_owner_name
 from cache import get_recent_searches, _ensure_db
@@ -27,9 +33,6 @@ st.set_page_config(
 # ═══════════════════════════════════════════════════════════════════════════════
 #  SUSHI-THEMED CSS — Warm Greyish-Brown Luxury
 # ═══════════════════════════════════════════════════════════════════════════════
-# Cache-busting version: bump this number when CSS changes to force client refresh
-_CSS_VERSION = "2"
-
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -642,7 +645,7 @@ if result:
 
     icon = {"vat_id": "#", "company_name": "◎", "owner_name": "◈"}.get(result.query_type, "◇")
     st.markdown(
-        f'<div class="results-header">{icon}&nbsp;&nbsp;Results for "{result.query}"</div>',
+        f'<div class="results-header">{icon}&nbsp;&nbsp;Results for "{_h(result.query)}"</div>',
         unsafe_allow_html=True
     )
 
@@ -698,9 +701,9 @@ if result:
 
             # Build badges
             badges = [
-                f'<span class="badge {form_class}">{company.legal_form}</span>',
-                f'<span class="badge {status_class}">{company.status}</span>',
-                f'<span class="badge {conf_class}">{company.confidence}</span>',
+                f'<span class="badge {form_class}">{_h(company.legal_form)}</span>',
+                f'<span class="badge {status_class}">{_h(company.status)}</span>',
+                f'<span class="badge {conf_class}">{_h(company.confidence)}</span>',
             ]
             if result.from_cache:
                 badges.append('<span class="badge badge-cache">Cached</span>')
@@ -709,11 +712,11 @@ if result:
             badges_html = " ".join(badges)
 
             # Meta line
-            meta_parts = [f"<strong>ID:</strong> {company.id_code}"]
+            meta_parts = [f"<strong>ID:</strong> {_h(company.id_code)}"]
             if company.registration_date:
-                meta_parts.append(f"<strong>Registered:</strong> {company.registration_date}")
+                meta_parts.append(f"<strong>Registered:</strong> {_h(company.registration_date)}")
             if company.address:
-                meta_parts.append(f"<strong>Address:</strong> {company.address}")
+                meta_parts.append(f"<strong>Address:</strong> {_h(company.address)}")
             meta_html = "&nbsp;&nbsp;|&nbsp;&nbsp;".join(meta_parts)
 
             # Industry
@@ -721,7 +724,7 @@ if result:
                 industry_html = (
                     '<div class="industry-line">'
                     '  <span class="label">Industry (inferred)</span><br>'
-                    f'  <span class="industry-value">{company.industry}</span>'
+                    f'  <span class="industry-value">{_h(company.industry)}</span>'
                     '</div>'
                 )
             else:
@@ -742,7 +745,7 @@ if result:
                 rows = []
                 for d in company.directors:
                     warn = " <span class='nominee-warning'>— may be nominee</span>" if d.is_nominee_warning else ""
-                    rows.append(f"<div class='person-row'>• {d.name}{warn}</div>")
+                    rows.append(f"<div class='person-row'>• {_h(d.name)}{warn}</div>")
                 directors_html = '<div class="section-title">Directors & Representatives</div>' + "".join(rows)
 
             # Shareholders section
@@ -750,8 +753,8 @@ if result:
             if company.shareholders:
                 rows = []
                 for s in company.shareholders:
-                    share_info = f" <span class='person-share'>({s.share_percent}%)</span>" if s.share_percent else ""
-                    rows.append(f"<div class='person-row'>• {s.name}{share_info}</div>")
+                    share_info = f" <span class='person-share'>({_h(s.share_percent)}%)</span>" if s.share_percent else ""
+                    rows.append(f"<div class='person-row'>• {_h(s.name)}{share_info}</div>")
                 shareholders_html = '<div class="section-title">Owners & Shareholders</div>' + "".join(rows)
             elif not company.is_individual_entrepreneur:
                 shareholders_html = '<div class="section-title">Owners & Shareholders</div><div class="person-row" style="color: #8A7E70; font-style: italic;">No shareholder data available in this record.</div>'
@@ -769,7 +772,7 @@ if result:
             # ── Assemble entire card as ONE HTML block (2-space indent, safe for Markdown) ──
             card_lines = [
                 '<div class="result-card">',
-                f'  <div class="company-title">{company.name}</div>',
+                f'  <div class="company-title">{_h(company.name)}</div>',
                 f'  <div class="badge-row">{badges_html}</div>',
                 f'  <div class="meta-line">{meta_html}</div>',
                 f'  {industry_html}',
@@ -791,11 +794,11 @@ if result:
                             st.markdown(
                                 f'<div style="background:#F5F0E8;border:1px solid #D8CFC0;padding:0.8rem 1rem;margin-bottom:1rem;font-size:0.85rem;">'
                                 f'  <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.14em;color:#5A5048;margin-bottom:0.4rem;">NAPR Public Registry</div>'
-                                f'  <strong>Status:</strong> {napr_data.status}<br>'
-                                f'  <strong>Name:</strong> {napr_data.name}<br>'
-                                f'  <strong>Legal Form:</strong> {napr_data.legal_form}<br>'
+                                f'  <strong>Status:</strong> {_h(napr_data.status)}<br>'
+                                f'  <strong>Name:</strong> {_h(napr_data.name)}<br>'
+                                f'  <strong>Legal Form:</strong> {_h(napr_data.legal_form)}<br>'
                                 f'  <span style="font-size:0.7rem;color:#8A7E70;margin-top:0.3rem;display:block;">'
-                                f'    Copy ID <strong>{company.id_code}</strong> and paste it into the NAPR search box.'
+                                f'    Copy ID <strong>{_h(company.id_code)}</strong> and paste it into the NAPR search box.'
                                 f'  </span>'
                                 f'  <a href="https://enreg.reestri.gov.ge/main.php?m=new_index&l=en" target="_blank" style="color:#1A1A1A;text-decoration:underline;">Open NAPR Portal ↗</a>'
                                 f'</div>',
@@ -828,7 +831,7 @@ if net_result:
 
     icon = "🔗" if net_result.query_type == "person" else "◎"
     st.markdown(
-        f'<div class="results-header">{icon}&nbsp;&nbsp;Network: "{net_result.query}"</div>',
+        f'<div class="results-header">{icon}&nbsp;&nbsp;Network: "{_h(net_result.query)}"</div>',
         unsafe_allow_html=True
     )
 
@@ -882,26 +885,26 @@ if net_result:
                 conf_class = f"badge-{company.confidence}"
 
                 badges = [
-                    f'<span class="badge {form_class}">{company.legal_form}</span>',
-                    f'<span class="badge {status_class}">{company.status}</span>',
-                    f'<span class="badge {conf_class}">{company.confidence}</span>',
+                    f'<span class="badge {form_class}">{_h(company.legal_form)}</span>',
+                    f'<span class="badge {status_class}">{_h(company.status)}</span>',
+                    f'<span class="badge {conf_class}">{_h(company.confidence)}</span>',
                 ]
                 if company.industry and company.industry_source == "heuristic":
                     badges.append('<span class="badge badge-heuristic">Heuristic</span>')
                 badges_html = " ".join(badges)
 
-                meta_parts = [f"<strong>ID:</strong> {company.id_code}"]
+                meta_parts = [f"<strong>ID:</strong> {_h(company.id_code)}"]
                 if company.registration_date:
-                    meta_parts.append(f"<strong>Registered:</strong> {company.registration_date}")
+                    meta_parts.append(f"<strong>Registered:</strong> {_h(company.registration_date)}")
                 if company.address:
-                    meta_parts.append(f"<strong>Address:</strong> {company.address}")
+                    meta_parts.append(f"<strong>Address:</strong> {_h(company.address)}")
                 meta_html = "&nbsp;&nbsp;|&nbsp;&nbsp;".join(meta_parts)
 
                 if company.industry:
                     industry_html = (
                         '<div class="industry-line">'
                         '  <span class="label">Industry (inferred)</span><br>'
-                        f'  <span class="industry-value">{company.industry}</span>'
+                        f'  <span class="industry-value">{_h(company.industry)}</span>'
                         '</div>'
                     )
                 else:
@@ -921,15 +924,15 @@ if net_result:
                     rows = []
                     for d in company.directors:
                         warn = " <span class='nominee-warning'>— may be nominee</span>" if d.is_nominee_warning else ""
-                        rows.append(f"<div class='person-row'>• {d.name}{warn}</div>")
+                        rows.append(f"<div class='person-row'>• {_h(d.name)}{warn}</div>")
                     directors_html = '<div class="section-title">Directors & Representatives</div>' + "".join(rows)
 
                 shareholders_html = ""
                 if company.shareholders:
                     rows = []
                     for s in company.shareholders:
-                        share_info = f" <span class='person-share'>({s.share_percent}%)</span>" if s.share_percent else ""
-                        rows.append(f"<div class='person-row'>• {s.name}{share_info}</div>")
+                        share_info = f" <span class='person-share'>({_h(s.share_percent)}%)</span>" if s.share_percent else ""
+                        rows.append(f"<div class='person-row'>• {_h(s.name)}{share_info}</div>")
                     shareholders_html = '<div class="section-title">Owners & Shareholders</div>' + "".join(rows)
                 elif not company.is_individual_entrepreneur:
                     shareholders_html = '<div class="section-title">Owners & Shareholders</div><div class="person-row" style="color: #8A7E70; font-style: italic;">No shareholder data available in this record.</div>'
@@ -945,7 +948,7 @@ if net_result:
 
                 card_lines = [
                     '<div class="result-card">',
-                    f'  <div class="company-title">{company.name}</div>',
+                    f'  <div class="company-title">{_h(company.name)}</div>',
                     f'  <div class="badge-row">{badges_html}</div>',
                     f'  <div class="meta-line">{meta_html}</div>',
                     f'  {industry_html}',
@@ -966,10 +969,13 @@ if net_result:
                                 st.markdown(
                                     f'<div style="background:#F5F0E8;border:1px solid #D8CFC0;padding:0.8rem 1rem;margin-bottom:1rem;font-size:0.85rem;">'
                                     f'  <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.14em;color:#5A5048;margin-bottom:0.4rem;">NAPR Public Registry</div>'
-                                    f'  <strong>Status:</strong> {napr_data.status}<br>'
-                                    f'  <strong>Name:</strong> {napr_data.name}<br>'
-                                    f'  <strong>Legal Form:</strong> {napr_data.legal_form}<br>'
-                                    f'  <a href="{napr_data.source_url}" target="_blank" style="color:#1A1A1A;text-decoration:underline;">Open on NAPR ↗</a>'
+                                    f'  <strong>Status:</strong> {_h(napr_data.status)}<br>'
+                                    f'  <strong>Name:</strong> {_h(napr_data.name)}<br>'
+                                    f'  <strong>Legal Form:</strong> {_h(napr_data.legal_form)}<br>'
+                                    f'  <span style="font-size:0.7rem;color:#8A7E70;margin-top:0.3rem;display:block;">'
+                                    f'    Copy ID <strong>{_h(company.id_code)}</strong> and paste it into the NAPR search box.'
+                                    f'  </span>'
+                                    f'  <a href="https://enreg.reestri.gov.ge/main.php?m=new_index&l=en" target="_blank" style="color:#1A1A1A;text-decoration:underline;">Open NAPR Portal ↗</a>'
                                     f'</div>',
                                     unsafe_allow_html=True
                                 )

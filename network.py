@@ -6,6 +6,7 @@ Keeps API calls bounded to avoid rate limits:
 - Max 3 co-directors traced per company
 - 0.5s delay between calls
 """
+import html
 import logging
 import re
 import time
@@ -42,7 +43,7 @@ def _is_fresh(date_str: Optional[str]) -> bool:
     try:
         for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%Y-%m-%d %H:%M:%S"):
             try:
-                reg = datetime.strptime(date_str.split()[0], "%Y-%m-%d")
+                reg = datetime.strptime(date_str.split()[0], fmt)
                 break
             except ValueError:
                 continue
@@ -128,11 +129,11 @@ def build_person_network(name: str) -> NetworkResult:
         cid = aff.get("companyId")
         if cid:
             company_ids.add(cid)
-            role = aff.get("role", "Director")
+            role = html.escape(aff.get("role", "Director"))
             share = aff.get("share", 0)
             label = f"{role}"
             if share:
-                label += f" {share}%"
+                label += f" {html.escape(str(share))}%"
             role_map[cid] = label
     
     for own in person_detail.get("ownership", [])[:MAX_COMPANIES_PER_PERSON]:
@@ -142,7 +143,7 @@ def build_person_network(name: str) -> NetworkResult:
             share = own.get("share", 0)
             label = role_map.get(cid, "Shareholder")
             if share and f"{share}%" not in label:
-                label += f" {share}%"
+                label += f" {html.escape(str(share))}%"
             role_map[cid] = label
     
     if not company_ids:
@@ -170,9 +171,9 @@ def build_person_network(name: str) -> NetworkResult:
         
         # Company node
         comp_node_id = _safe_id(f"c_{company.name}_{company.id_code}")
-        comp_label = company.name
+        comp_label = html.escape(company.name)
         if company.industry:
-            comp_label += f"<br/><span style='font-size:0.8em'>{company.industry}</span>"
+            comp_label += f"<br/><span style='font-size:0.8em'>{html.escape(company.industry)}</span>"
         
         comp_risks = _detect_company_risks(company)
         comp_type = "company"
@@ -225,7 +226,7 @@ def build_person_network(name: str) -> NetworkResult:
             
             if is_nominee:
                 dir_type = "risk_person"
-                dir_label = f"⚠️ {dir_name}<br/><span style='font-size:0.75em'>Directs {dir_company_count}+ companies</span>"
+                dir_label = f"⚠️ {html.escape(dir_name)}<br/><span style='font-size:0.75em'>Directs {dir_company_count}+ companies</span>"
                 result.risk_flags.append(f"⚠️ {dir_name} appears to be a professional nominee (directs {dir_company_count}+ companies)")
             else:
                 dir_type = "person"
@@ -296,9 +297,9 @@ def build_company_network(name: str) -> NetworkResult:
     
     # Company node (center)
     comp_node_id = _safe_id(f"c_{company.name}_{company.id_code}")
-    comp_label = company.name
+    comp_label = html.escape(company.name)
     if company.industry:
-        comp_label += f"<br/><span style='font-size:0.8em'>{company.industry}</span>"
+        comp_label += f"<br/><span style='font-size:0.8em'>{html.escape(company.industry)}</span>"
     
     comp_risks = _detect_company_risks(company)
     comp_type = "company"
@@ -341,6 +342,7 @@ def build_company_network(name: str) -> NetworkResult:
             result.risk_flags.append(f"⚠️ {person.name} appears to be a professional nominee")
         else:
             p_type = "person"
+        p_label = html.escape(p_label) if isinstance(p_label, str) else p_label
         
         result.nodes.append(NetworkNode(
             node_id=p_node_id,
@@ -348,9 +350,9 @@ def build_company_network(name: str) -> NetworkResult:
             node_type=p_type,
         ))
         
-        edge_label = person.role
+        edge_label = html.escape(person.role)
         if person.share_percent:
-            edge_label += f" {person.share_percent}%"
+            edge_label += f" {html.escape(str(person.share_percent))}%"
         result.edges.append(NetworkEdge(
             source=comp_node_id,
             target=p_node_id,
@@ -358,6 +360,13 @@ def build_company_network(name: str) -> NetworkResult:
         ))
     
     return result
+
+
+def _sanitize_mermaid(text: str) -> str:
+    """Strip script tags and event handlers from Mermaid labels."""
+    text = re.sub(r'<script\b[^>]*>.*?</script>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'\son\w+\s*=\s*["\'][^"\']*["\']', '', text, flags=re.IGNORECASE)
+    return text
 
 
 def generate_mermaid(network: NetworkResult) -> str:
@@ -376,12 +385,12 @@ def generate_mermaid(network: NetworkResult) -> str:
     
     # Nodes
     for node in network.nodes:
-        label = node.label.replace('"', '&quot;')
+        label = _sanitize_mermaid(node.label).replace('"', '&quot;')
         lines.append(f'    {node.node_id}["{label}"]')
     
     # Edges
     for edge in network.edges:
-        label = edge.label.replace('"', '&quot;')
+        label = _sanitize_mermaid(edge.label).replace('"', '&quot;')
         lines.append(f'    {edge.source} -->|"{label}"| {edge.target}')
     
     # Class assignments

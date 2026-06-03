@@ -36,7 +36,7 @@ class Company:
 
     @property
     def is_individual_entrepreneur(self) -> bool:
-        return self.legal_form == "იმ" or len(self.id_code) == 11
+        return self.legal_form == "Individual Entrepreneur" or len(self.id_code) == 11
 
     @property
     def owners_summary(self) -> str:
