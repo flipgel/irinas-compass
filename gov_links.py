@@ -7,21 +7,16 @@ page in her browser and download the most recent extract / corporate
 decision herself.
 """
 
-from typing import Optional
 
+def napr_search_url(id_code: str) -> str:
+    """Working deep link to NAPR English search results pre-filled with company ID.
 
-def napr_extract_url(id_code: str) -> str:
-    """Deep link to NAPR English search portal pre-filled with company ID.
-
-    The portal allows anyone to search by registration number and download
-    a free electronic extract (PDF) with a QR verification code.
+    NAPR requires a CAPTCHA when viewing individual company details, but the
+    search-results listing works directly.  Irina will see the company in the
+    results table and can click it to complete the CAPTCHA and download the
+    free electronic extract (PDF) with QR verification code.
     """
-    return f"https://enreg.reestri.gov.ge/main.php?c=search&m=search_by_number&n={id_code}"
-
-
-def napr_extract_url_ka(id_code: str) -> str:
-    """Georgian-language version of the NAPR search portal."""
-    return f"https://www.reestri.gov.ge/main.php?c=search&m=search_by_number&n={id_code}"
+    return f"https://enreg.reestri.gov.ge/main.php?c=search&m=find_legal_persons&s_legal_person_idnumber={id_code}"
 
 
 def mygov_portal_url() -> str:
@@ -38,7 +33,6 @@ def mygov_portal_url() -> str:
 def gov_links_for(id_code: str) -> dict:
     """Return both government links for a given company/person ID."""
     return {
-        "napr_en": napr_extract_url(id_code),
-        "napr_ka": napr_extract_url_ka(id_code),
+        "napr": napr_search_url(id_code),
         "mygov": mygov_portal_url(),
     }
