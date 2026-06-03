@@ -10,6 +10,7 @@ from cache import get_recent_searches, _ensure_db
 from models import SearchResult
 from network import build_person_network, build_company_network, generate_mermaid
 from gov_links import gov_links_for
+from napr_scraper import fetch_napr_search
 
 # Run DB migration on startup (adds industry columns if missing)
 _ensure_db()
@@ -756,18 +757,6 @@ if result:
             elif not company.is_individual_entrepreneur:
                 shareholders_html = '<div class="section-title">Owners & Shareholders</div><div class="person-row" style="color: #8A7E70; font-style: italic;">No shareholder data available in this record.</div>'
 
-            # Government documents
-            gov = gov_links_for(company.id_code)
-            gov_docs_html = (
-                '<div class="gov-docs">'
-                '  <div class="gov-docs-title">Official Government Document</div>'
-                f'  <a class="gov-doc-link" href="{gov["napr"]}" target="_blank">📄 NAPR Registry Extract</a>'
-                '  <div style="font-size:0.7rem;color:#8A7E70;margin-top:0.4rem;line-height:1.4;">'
-                '    Click to open the official NAPR search results, then complete the quick CAPTCHA to view the company details and download the latest PDF extract.'
-                '  </div>'
-                '</div>'
-            )
-
             # Footer
             fetched_str = company.fetched_at.strftime('%Y-%m-%d %H:%M') if company.fetched_at else 'unknown'
             footer_html = (
@@ -775,7 +764,7 @@ if result:
                 f'&nbsp;&nbsp;·&nbsp;&nbsp;'
                 f'Fetched: {fetched_str}'
                 f'&nbsp;&nbsp;·&nbsp;&nbsp;'
-                f'<a href="https://enreg.reestri.gov.ge/main.php?c=search&m=search_by_number&n={company.id_code}" target="_blank">Verify on NAPR ↗</a>'
+                f'<a href="https://enreg.reestri.gov.ge/main.php?c=search&m=find_legal_persons&s_legal_person_idnumber={company.id_code}" target="_blank">Verify on NAPR ↗</a>'
             )
 
             # ── Assemble entire card as ONE HTML block (2-space indent, safe for Markdown) ──
@@ -787,12 +776,33 @@ if result:
                 f'  {industry_html}',
                 f'  {directors_html}',
                 f'  {shareholders_html}',
-                f'  {gov_docs_html}',
                 f'  <div class="card-footer">{footer_html}</div>',
                 '</div>',
             ]
             card_html = '\n'.join(card_lines)
             st.markdown(card_html, unsafe_allow_html=True)
+
+            # NAPR fetch button (Streamlit native, outside HTML card)
+            napr_key = f"napr_{result.query_type}_{company.id_code}"
+            if st.button("📄 Load NAPR Status", key=napr_key):
+                with st.spinner("Fetching from NAPR..."):
+                    try:
+                        napr_data = fetch_napr_search(company.id_code)
+                        if napr_data:
+                            st.markdown(
+                                f'<div style="background:#F5F0E8;border:1px solid #D8CFC0;padding:0.8rem 1rem;margin-bottom:1rem;font-size:0.85rem;">'
+                                f'  <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.14em;color:#5A5048;margin-bottom:0.4rem;">NAPR Public Registry</div>'
+                                f'  <strong>Status:</strong> {napr_data.status}<br>'
+                                f'  <strong>Name:</strong> {napr_data.name}<br>'
+                                f'  <strong>Legal Form:</strong> {napr_data.legal_form}<br>'
+                                f'  <a href="{napr_data.source_url}" target="_blank" style="color:#1A1A1A;text-decoration:underline;">Open on NAPR ↗</a>'
+                                f'</div>',
+                                unsafe_allow_html=True
+                            )
+                        else:
+                            st.warning("No NAPR data found for this ID.")
+                    except Exception as e:
+                        st.error(f"NAPR fetch failed: {e}")
 
         # ── Disclaimer ──
         st.markdown("""
@@ -922,17 +932,6 @@ if net_result:
                 elif not company.is_individual_entrepreneur:
                     shareholders_html = '<div class="section-title">Owners & Shareholders</div><div class="person-row" style="color: #8A7E70; font-style: italic;">No shareholder data available in this record.</div>'
 
-                gov = gov_links_for(company.id_code)
-                gov_docs_html = (
-                    '<div class="gov-docs">'
-                    '  <div class="gov-docs-title">Official Government Document</div>'
-                    f'  <a class="gov-doc-link" href="{gov["napr"]}" target="_blank">📄 NAPR Registry Extract</a>'
-                    '  <div style="font-size:0.7rem;color:#8A7E70;margin-top:0.4rem;line-height:1.4;">'
-                    '    Click to open the official NAPR search results, then complete the quick CAPTCHA to view the company details and download the latest PDF extract.'
-                    '  </div>'
-                    '</div>'
-                )
-
                 fetched_str = company.fetched_at.strftime('%Y-%m-%d %H:%M') if company.fetched_at else 'unknown'
                 footer_html = (
                     f'Source: <a href="{company.source_url}" target="_blank">companyinfo.ge</a>'
@@ -950,11 +949,32 @@ if net_result:
                     f'  {industry_html}',
                     f'  {directors_html}',
                     f'  {shareholders_html}',
-                    f'  {gov_docs_html}',
                     f'  <div class="card-footer">{footer_html}</div>',
                     '</div>',
                 ]
                 st.markdown('\n'.join(card_lines), unsafe_allow_html=True)
+
+                # NAPR fetch button (Streamlit native, outside HTML card)
+                napr_key = f"napr_net_{company.id_code}"
+                if st.button("📄 Load NAPR Status", key=napr_key):
+                    with st.spinner("Fetching from NAPR..."):
+                        try:
+                            napr_data = fetch_napr_search(company.id_code)
+                            if napr_data:
+                                st.markdown(
+                                    f'<div style="background:#F5F0E8;border:1px solid #D8CFC0;padding:0.8rem 1rem;margin-bottom:1rem;font-size:0.85rem;">'
+                                    f'  <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.14em;color:#5A5048;margin-bottom:0.4rem;">NAPR Public Registry</div>'
+                                    f'  <strong>Status:</strong> {napr_data.status}<br>'
+                                    f'  <strong>Name:</strong> {napr_data.name}<br>'
+                                    f'  <strong>Legal Form:</strong> {napr_data.legal_form}<br>'
+                                    f'  <a href="{napr_data.source_url}" target="_blank" style="color:#1A1A1A;text-decoration:underline;">Open on NAPR ↗</a>'
+                                    f'</div>',
+                                    unsafe_allow_html=True
+                                )
+                            else:
+                                st.warning("No NAPR data found for this ID.")
+                        except Exception as e:
+                            st.error(f"NAPR fetch failed: {e}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
