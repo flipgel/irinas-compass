@@ -9,7 +9,6 @@ from scraper import search_by_vat_id, search_by_company_name, search_by_owner_na
 from cache import get_recent_searches, _ensure_db
 from models import SearchResult
 from network import build_person_network, build_company_network, generate_mermaid
-from gov_links import gov_links_for
 from napr_scraper import fetch_napr_search
 
 # Run DB migration on startup (adds industry columns if missing)
