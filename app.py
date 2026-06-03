@@ -764,7 +764,7 @@ if result:
                 f'&nbsp;&nbsp;·&nbsp;&nbsp;'
                 f'Fetched: {fetched_str}'
                 f'&nbsp;&nbsp;·&nbsp;&nbsp;'
-                f'<a href="https://enreg.reestri.gov.ge/main.php?c=search&m=find_legal_persons&s_legal_person_idnumber={company.id_code}" target="_blank">Verify on NAPR ↗</a>'
+                f'<a href="https://enreg.reestri.gov.ge/main.php?m=new_index&l=en" target="_blank">Verify on NAPR ↗</a>'
             )
 
             # ── Assemble entire card as ONE HTML block (2-space indent, safe for Markdown) ──
@@ -795,7 +795,10 @@ if result:
                                 f'  <strong>Status:</strong> {napr_data.status}<br>'
                                 f'  <strong>Name:</strong> {napr_data.name}<br>'
                                 f'  <strong>Legal Form:</strong> {napr_data.legal_form}<br>'
-                                f'  <a href="{napr_data.source_url}" target="_blank" style="color:#1A1A1A;text-decoration:underline;">Open on NAPR ↗</a>'
+                                f'  <span style="font-size:0.7rem;color:#8A7E70;margin-top:0.3rem;display:block;">'
+                                f'    Copy ID <strong>{company.id_code}</strong> and paste it into the NAPR search box.'
+                                f'  </span>'
+                                f'  <a href="https://enreg.reestri.gov.ge/main.php?m=new_index&l=en" target="_blank" style="color:#1A1A1A;text-decoration:underline;">Open NAPR Portal ↗</a>'
                                 f'</div>',
                                 unsafe_allow_html=True
                             )
@@ -938,7 +941,7 @@ if net_result:
                     f'&nbsp;&nbsp;·&nbsp;&nbsp;'
                     f'Fetched: {fetched_str}'
                     f'&nbsp;&nbsp;·&nbsp;&nbsp;'
-                    f'<a href="https://enreg.reestri.gov.ge/main.php?c=search&m=search_by_number&n={company.id_code}" target="_blank">Verify on NAPR ↗</a>'
+                    f'<a href="https://enreg.reestri.gov.ge/main.php?m=new_index&l=en" target="_blank">Verify on NAPR ↗</a>'
                 )
 
                 card_lines = [

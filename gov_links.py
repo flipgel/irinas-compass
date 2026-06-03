@@ -8,15 +8,16 @@ decision herself.
 """
 
 
-def napr_search_url(id_code: str) -> str:
-    """Working deep link to NAPR English search results pre-filled with company ID.
+def napr_portal_url() -> str:
+    """Link to the NAPR English portal main page.
 
-    NAPR requires a CAPTCHA when viewing individual company details, but the
-    search-results listing works directly.  Irina will see the company in the
-    results table and can click it to complete the CAPTCHA and download the
-    free electronic extract (PDF) with QR verification code.
+    NAPR's site is a single-page application without deep-linking support.
+    The raw search-results URL returns a broken HTML fragment (missing
+    charset declaration and JavaScript).  We link the main portal page
+    instead, which is fully functional and properly encoded.  Users can
+    copy the ID code from our app and paste it into NAPR's search box.
     """
-    return f"https://enreg.reestri.gov.ge/main.php?c=search&m=find_legal_persons&s_legal_person_idnumber={id_code}"
+    return "https://enreg.reestri.gov.ge/main.php?m=new_index&l=en"
 
 
 def mygov_portal_url() -> str:
@@ -33,6 +34,6 @@ def mygov_portal_url() -> str:
 def gov_links_for(id_code: str) -> dict:
     """Return both government links for a given company/person ID."""
     return {
-        "napr": napr_search_url(id_code),
+        "napr": napr_portal_url(),
         "mygov": mygov_portal_url(),
     }
