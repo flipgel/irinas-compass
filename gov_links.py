@@ -21,14 +21,18 @@ def napr_portal_url() -> str:
 
 
 def mygov_portal_url() -> str:
-    """Link to my.gov.ge e-services portal.
-
-    my.gov.ge is an Angular SPA.  Corporate decisions for a company are
-    published under the company's personal account after login.  There is
-    currently no public deep-link that accepts a company ID without
-    authentication, so we link the main portal landing page.
-    """
+    """Link to my.gov.ge e-services portal main page."""
     return "https://www.my.gov.ge/"
+
+
+def mygov_company_url(id_code: str) -> str:
+    """Deep-link to the my.gov.ge business-entity search service.
+
+    Service 179 under category 10 is the NAPR business-entity lookup.
+    We pass the identification code as a query parameter so the Angular
+    app can (in a real browser) pre-fill the search field.
+    """
+    return f"https://www.my.gov.ge/ka-ge/services/10/service/179?code={id_code}"
 
 
 def gov_links_for(id_code: str) -> dict:
@@ -36,4 +40,5 @@ def gov_links_for(id_code: str) -> dict:
     return {
         "napr": napr_portal_url(),
         "mygov": mygov_portal_url(),
+        "mygov_company": mygov_company_url(id_code),
     }

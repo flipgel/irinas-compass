@@ -16,6 +16,7 @@ from cache import get_recent_searches, _ensure_db
 from models import SearchResult
 from network import build_person_network, build_company_network, generate_mermaid
 from napr_scraper import fetch_napr_search
+from gov_links import mygov_company_url
 
 # Run DB migration on startup (adds industry columns if missing)
 _ensure_db()
@@ -784,30 +785,39 @@ if result:
             card_html = '\n'.join(card_lines)
             st.markdown(card_html, unsafe_allow_html=True)
 
-            # NAPR fetch button (Streamlit native, outside HTML card)
-            napr_key = f"napr_{result.query_type}_{company.id_code}"
-            if st.button("📄 Load NAPR Status", key=napr_key):
-                with st.spinner("Fetching from NAPR..."):
-                    try:
-                        napr_data = fetch_napr_search(company.id_code)
-                        if napr_data:
-                            st.markdown(
-                                f'<div style="background:#F5F0E8;border:1px solid #D8CFC0;padding:0.8rem 1rem;margin-bottom:1rem;font-size:0.85rem;">'
-                                f'  <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.14em;color:#5A5048;margin-bottom:0.4rem;">NAPR Public Registry</div>'
-                                f'  <strong>Status:</strong> {_h(napr_data.status)}<br>'
-                                f'  <strong>Name:</strong> {_h(napr_data.name)}<br>'
-                                f'  <strong>Legal Form:</strong> {_h(napr_data.legal_form)}<br>'
-                                f'  <span style="font-size:0.7rem;color:#8A7E70;margin-top:0.3rem;display:block;">'
-                                f'    Copy ID <strong>{_h(company.id_code)}</strong> and paste it into the NAPR search box.'
-                                f'  </span>'
-                                f'  <a href="https://enreg.reestri.gov.ge/main.php?m=new_index&l=en" target="_blank" style="color:#1A1A1A;text-decoration:underline;">Open NAPR Portal ↗</a>'
-                                f'</div>',
-                                unsafe_allow_html=True
-                            )
-                        else:
-                            st.warning("No NAPR data found for this ID.")
-                    except Exception as e:
-                        st.error(f"NAPR fetch failed: {e}")
+            # Government portal buttons
+            btn_col1, btn_col2 = st.columns([1, 1])
+            with btn_col1:
+                st.link_button(
+                    "🏛️ Open my.gov.ge Archive",
+                    url=mygov_company_url(company.id_code),
+                    key=f"mygov_{result.query_type}_{company.id_code}",
+                    use_container_width=True,
+                )
+            with btn_col2:
+                napr_key = f"napr_{result.query_type}_{company.id_code}"
+                if st.button("📄 Load NAPR Status", key=napr_key, use_container_width=True):
+                    with st.spinner("Fetching from NAPR..."):
+                        try:
+                            napr_data = fetch_napr_search(company.id_code)
+                            if napr_data:
+                                st.markdown(
+                                    f'<div style="background:#F5F0E8;border:1px solid #D8CFC0;padding:0.8rem 1rem;margin-bottom:1rem;font-size:0.85rem;">'
+                                    f'  <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.14em;color:#5A5048;margin-bottom:0.4rem;">NAPR Public Registry</div>'
+                                    f'  <strong>Status:</strong> {_h(napr_data.status)}<br>'
+                                    f'  <strong>Name:</strong> {_h(napr_data.name)}<br>'
+                                    f'  <strong>Legal Form:</strong> {_h(napr_data.legal_form)}<br>'
+                                    f'  <span style="font-size:0.7rem;color:#8A7E70;margin-top:0.3rem;display:block;">'
+                                    f'    Copy ID <strong>{_h(company.id_code)}</strong> and paste it into the NAPR search box.'
+                                    f'  </span>'
+                                    f'  <a href="https://enreg.reestri.gov.ge/main.php?m=new_index&l=en" target="_blank" style="color:#1A1A1A;text-decoration:underline;">Open NAPR Portal ↗</a>'
+                                    f'</div>',
+                                    unsafe_allow_html=True
+                                )
+                            else:
+                                st.warning("No NAPR data found for this ID.")
+                        except Exception as e:
+                            st.error(f"NAPR fetch failed: {e}")
 
         # ── Disclaimer ──
         st.markdown("""
@@ -959,30 +969,39 @@ if net_result:
                 ]
                 st.markdown('\n'.join(card_lines), unsafe_allow_html=True)
 
-                # NAPR fetch button (Streamlit native, outside HTML card)
-                napr_key = f"napr_net_{company.id_code}"
-                if st.button("📄 Load NAPR Status", key=napr_key):
-                    with st.spinner("Fetching from NAPR..."):
-                        try:
-                            napr_data = fetch_napr_search(company.id_code)
-                            if napr_data:
-                                st.markdown(
-                                    f'<div style="background:#F5F0E8;border:1px solid #D8CFC0;padding:0.8rem 1rem;margin-bottom:1rem;font-size:0.85rem;">'
-                                    f'  <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.14em;color:#5A5048;margin-bottom:0.4rem;">NAPR Public Registry</div>'
-                                    f'  <strong>Status:</strong> {_h(napr_data.status)}<br>'
-                                    f'  <strong>Name:</strong> {_h(napr_data.name)}<br>'
-                                    f'  <strong>Legal Form:</strong> {_h(napr_data.legal_form)}<br>'
-                                    f'  <span style="font-size:0.7rem;color:#8A7E70;margin-top:0.3rem;display:block;">'
-                                    f'    Copy ID <strong>{_h(company.id_code)}</strong> and paste it into the NAPR search box.'
-                                    f'  </span>'
-                                    f'  <a href="https://enreg.reestri.gov.ge/main.php?m=new_index&l=en" target="_blank" style="color:#1A1A1A;text-decoration:underline;">Open NAPR Portal ↗</a>'
-                                    f'</div>',
-                                    unsafe_allow_html=True
-                                )
-                            else:
-                                st.warning("No NAPR data found for this ID.")
-                        except Exception as e:
-                            st.error(f"NAPR fetch failed: {e}")
+                # Government portal buttons
+                btn_col1, btn_col2 = st.columns([1, 1])
+                with btn_col1:
+                    st.link_button(
+                        "🏛️ Open my.gov.ge Archive",
+                        url=mygov_company_url(company.id_code),
+                        key=f"mygov_net_{company.id_code}",
+                        use_container_width=True,
+                    )
+                with btn_col2:
+                    napr_key = f"napr_net_{company.id_code}"
+                    if st.button("📄 Load NAPR Status", key=napr_key, use_container_width=True):
+                        with st.spinner("Fetching from NAPR..."):
+                            try:
+                                napr_data = fetch_napr_search(company.id_code)
+                                if napr_data:
+                                    st.markdown(
+                                        f'<div style="background:#F5F0E8;border:1px solid #D8CFC0;padding:0.8rem 1rem;margin-bottom:1rem;font-size:0.85rem;">'
+                                        f'  <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.14em;color:#5A5048;margin-bottom:0.4rem;">NAPR Public Registry</div>'
+                                        f'  <strong>Status:</strong> {_h(napr_data.status)}<br>'
+                                        f'  <strong>Name:</strong> {_h(napr_data.name)}<br>'
+                                        f'  <strong>Legal Form:</strong> {_h(napr_data.legal_form)}<br>'
+                                        f'  <span style="font-size:0.7rem;color:#8A7E70;margin-top:0.3rem;display:block;">'
+                                        f'    Copy ID <strong>{_h(company.id_code)}</strong> and paste it into the NAPR search box.'
+                                        f'  </span>'
+                                        f'  <a href="https://enreg.reestri.gov.ge/main.php?m=new_index&l=en" target="_blank" style="color:#1A1A1A;text-decoration:underline;">Open NAPR Portal ↗</a>'
+                                        f'</div>',
+                                        unsafe_allow_html=True
+                                    )
+                                else:
+                                    st.warning("No NAPR data found for this ID.")
+                            except Exception as e:
+                                st.error(f"NAPR fetch failed: {e}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
