@@ -11,6 +11,163 @@ def _h(text: str) -> str:
     """HTML-escape user content before injecting into rendered HTML."""
     return html.escape(str(text) if text is not None else "")
 
+
+def napr_search_url(id_code: str) -> str:
+    """Direct NAPR search results URL (no captcha for list view)."""
+    return (
+        "https://enreg.reestri.gov.ge/main.php"
+        f"?c=search&m=find_legal_persons&s_legal_person_idnumber={id_code}"
+    )
+
+
+def _render_company_card(company, from_cache: bool = False, btn_key_prefix: str = "") -> None:
+    """Render a company result card with action buttons.
+
+    This helper de-duplicates the card rendering logic used by both
+    regular search results and network analysis results.
+    """
+    status_class = {
+        "Active": "badge-active",
+        "In Liquidation": "badge-liquidation",
+        "Terminated": "badge-terminated",
+        "Suspended": "badge-terminated",
+    }.get(company.status, "badge-medium")
+
+    form_class = "badge-ie" if company.is_individual_entrepreneur else "badge-llc"
+    conf_class = f"badge-{company.confidence}"
+
+    badges = [
+        f'<span class="badge {form_class}">{_h(company.legal_form)}</span>',
+        f'<span class="badge {status_class}">{_h(company.status)}</span>',
+        f'<span class="badge {conf_class}">{_h(company.confidence)}</span>',
+    ]
+    if from_cache:
+        badges.append('<span class="badge badge-cache">Cached</span>')
+    if company.industry and company.industry_source == "heuristic":
+        badges.append('<span class="badge badge-heuristic">Heuristic</span>')
+    badges_html = " ".join(badges)
+
+    meta_parts = [f"<strong>ID:</strong> {_h(company.id_code)}"]
+    if company.registration_date:
+        meta_parts.append(f"<strong>Registered:</strong> {_h(company.registration_date)}")
+    if company.address:
+        meta_parts.append(f"<strong>Address:</strong> {_h(company.address)}")
+    meta_html = "&nbsp;&nbsp;|&nbsp;&nbsp;".join(meta_parts)
+
+    if company.industry:
+        industry_html = (
+            '<div class="industry-line">'
+            '  <span class="label">Industry (inferred)</span><br>'
+            f'  <span class="industry-value">{_h(company.industry)}</span>'
+            '</div>'
+        )
+    else:
+        industry_html = (
+            '<div class="industry-line">'
+            '  <span class="label">Industry</span><br>'
+            '  <span class="industry-missing">Not available in public registry</span>'
+            '  <span class="industry-links">'
+            '    &nbsp;· <a href="https://www.bia.ge/" target="_blank">BIA.ge ↗</a>'
+            '    &nbsp;· <a href="https://rs.ge/" target="_blank">RS.ge ↗</a>'
+            '  </span>'
+            '</div>'
+        )
+
+    directors_html = ""
+    if company.directors:
+        rows = []
+        for d in company.directors:
+            warn = " <span class='nominee-warning'>— may be nominee</span>" if d.is_nominee_warning else ""
+            rows.append(f"<div class='person-row'>• {_h(d.name)}{warn}</div>")
+        directors_html = '<div class="section-title">Directors & Representatives</div>' + "".join(rows)
+
+    shareholders_html = ""
+    if company.shareholders:
+        rows = []
+        for s in company.shareholders:
+            share_info = f" <span class='person-share'>({_h(s.share_percent)}%)</span>" if s.share_percent else ""
+            rows.append(f"<div class='person-row'>• {_h(s.name)}{share_info}</div>")
+        shareholders_html = '<div class="section-title">Owners & Shareholders</div>' + "".join(rows)
+    elif not company.is_individual_entrepreneur:
+        shareholders_html = '<div class="section-title">Owners & Shareholders</div><div class="person-row" style="color: #8A7E70; font-style: italic;">No shareholder data available in this record.</div>'
+
+    fetched_str = company.fetched_at.strftime('%Y-%m-%d %H:%M') if company.fetched_at else 'unknown'
+    footer_html = (
+        f'Source: <a href="{company.source_url}" target="_blank">companyinfo.ge</a>'
+        f'&nbsp;&nbsp;·&nbsp;&nbsp;'
+        f'Fetched: {fetched_str}'
+        f'&nbsp;&nbsp;·&nbsp;&nbsp;'
+        f'<a href="{napr_search_url(company.id_code)}" target="_blank">NAPR search ↗</a>'
+    )
+
+    card_lines = [
+        '<div class="result-card">',
+        f'  <div class="company-title">{_h(company.name)}</div>',
+        f'  <div class="badge-row">{badges_html}</div>',
+        f'  <div class="meta-line">{meta_html}</div>',
+        f'  {industry_html}',
+        f'  {directors_html}',
+        f'  {shareholders_html}',
+        f'  <div class="card-footer">{footer_html}</div>',
+        '</div>',
+    ]
+    st.markdown('\n'.join(card_lines), unsafe_allow_html=True)
+
+    # Action buttons
+    btn_col1, btn_col2, btn_col3 = st.columns([1, 1, 1])
+    with btn_col1:
+        copy_html = f"""<button id="copy-btn"
+  style="width:100%;padding:0.4rem 0.8rem;font-size:0.75rem;font-family:Inter,sans-serif;text-transform:uppercase;letter-spacing:0.08em;background-color:#FFFCF7;color:#1A1A1A;border:1px solid #C8BEB0;border-radius:2px;cursor:pointer;transition:background-color 0.15s;"
+  onmouseover="this.style.backgroundColor='#E85D4E';this.style.color='#FFFCF7';this.style.borderColor='#E85D4E'"
+  onmouseout="this.style.backgroundColor='#FFFCF7';this.style.color='#1A1A1A';this.style.borderColor='#C8BEB0'"
+>📋 Copy ID</button>
+<script>
+  document.getElementById('copy-btn').addEventListener('click', function() {{
+    navigator.clipboard.writeText('{company.id_code}').then(function() {{
+      var btn = document.getElementById('copy-btn');
+      btn.innerText = '✓ Copied!';
+      setTimeout(function() {{ btn.innerText = '📋 Copy ID'; }}, 1500);
+    }}).catch(function() {{
+      var btn = document.getElementById('copy-btn');
+      btn.innerText = '✗ Failed';
+      setTimeout(function() {{ btn.innerText = '📋 Copy ID'; }}, 1500);
+    }});
+  }});
+</script>"""
+        components.html(copy_html, height=45)
+    with btn_col2:
+        st.link_button(
+            "🏛️ Open my.gov.ge",
+            url=mygov_company_url(company.id_code),
+            key=f"mygov_{btn_key_prefix}_{company.id_code}",
+            use_container_width=True,
+        )
+    with btn_col3:
+        napr_key = f"napr_{btn_key_prefix}_{company.id_code}"
+        if st.button("📄 Load NAPR Status", key=napr_key, use_container_width=True):
+            with st.spinner("Fetching from NAPR..."):
+                try:
+                    napr_data = fetch_napr_search(company.id_code)
+                    if napr_data:
+                        st.markdown(
+                            f'<div style="background:#F5F0E8;border:1px solid #D8CFC0;padding:0.8rem 1rem;margin-bottom:1rem;font-size:0.85rem;">'
+                            f'  <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.14em;color:#5A5048;margin-bottom:0.4rem;">NAPR Public Registry</div>'
+                            f'  <strong>Status:</strong> {_h(napr_data.status)}<br>'
+                            f'  <strong>Name:</strong> {_h(napr_data.name)}<br>'
+                            f'  <strong>Legal Form:</strong> {_h(napr_data.legal_form)}<br>'
+                            f'  <span style="font-size:0.7rem;color:#8A7E70;margin-top:0.3rem;display:block;">'
+                            f'    Copy ID <strong>{_h(company.id_code)}</strong> and paste it into the NAPR search box.'
+                            f'  </span>'
+                            f'  <a href="https://enreg.reestri.gov.ge/main.php?m=new_index&l=en" target="_blank" style="color:#1A1A1A;text-decoration:underline;">Open NAPR Portal ↗</a>'
+                            f'</div>',
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        st.warning("No NAPR data found for this ID.")
+                except Exception as e:
+                    st.error(f"NAPR fetch failed: {e}")
+
+
 from scraper import search_by_vat_id, search_by_company_name, search_by_owner_name
 from cache import get_recent_searches, _ensure_db
 from models import SearchResult
@@ -80,9 +237,20 @@ st.markdown("""
     /* ── Hero ── */
     .hero {
         text-align: center;
-        padding: 3rem 0 2rem 0;
-        border-bottom: 1px solid #9E9486;
+        padding: 3.5rem 0 2.5rem 0;
         margin-bottom: 2rem;
+        position: relative;
+        background: linear-gradient(180deg, rgba(255,252,247,0.35) 0%, rgba(255,252,247,0) 100%);
+        border-radius: 4px;
+    }
+    .hero::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 10%;
+        right: 10%;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, #9E9486, transparent);
     }
     .hero-title {
         font-family: 'Inter', sans-serif;
@@ -92,6 +260,7 @@ st.markdown("""
         color: #1A1A1A;
         line-height: 1.0;
         margin-bottom: 0.4rem;
+        text-shadow: 0 1px 0 rgba(255,252,247,0.5);
     }
     .hero-sub {
         font-family: 'Inter', sans-serif;
@@ -101,18 +270,36 @@ st.markdown("""
         letter-spacing: 0.04em;
     }
     .hero-ornament {
-        font-size: 1.2rem;
-        margin-top: 0.8rem;
-        letter-spacing: 0.2em;
+        font-size: 1.4rem;
+        margin-top: 1rem;
+        letter-spacing: 0.25em;
+        opacity: 0.85;
+        animation: gentlePulse 3s ease-in-out infinite;
+    }
+    @keyframes gentlePulse {
+        0%, 100% { opacity: 0.7; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.05); }
     }
 
     /* ── Cards ── */
     .result-card {
         background-color: #FFFCF7;
         border: 1px solid #C8BEB0;
-        border-radius: 2px;
+        border-radius: 4px;
         padding: 1.8rem 2rem;
         margin-bottom: 1.2rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        animation: fadeInUp 0.5s ease-out both;
+    }
+    .result-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+        border-color: #B0A494;
+    }
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(12px); }
+        to   { opacity: 1; transform: translateY(0); }
     }
     .company-title {
         font-family: 'Inter', sans-serif;
@@ -423,14 +610,29 @@ st.markdown("""
     /* ── Empty state ── */
     .empty-state {
         text-align: center;
-        padding: 4rem 2rem;
+        padding: 5rem 2rem;
         color: #7A7060;
+        background: linear-gradient(180deg, rgba(255,252,247,0.25) 0%, rgba(255,252,247,0) 100%);
+        border-radius: 4px;
+        border: 1px dashed #C8BEB0;
+        margin-top: 1rem;
     }
     .empty-state .big {
-        font-size: 1.2rem;
-        font-weight: 500;
-        margin-bottom: 0.4rem;
+        font-size: 1.4rem;
+        font-weight: 600;
+        margin-bottom: 0.6rem;
         color: #5A5048;
+        letter-spacing: -0.02em;
+    }
+    .empty-state .emoji {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+        display: block;
+        animation: gentleFloat 4s ease-in-out infinite;
+    }
+    @keyframes gentleFloat {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-6px); }
     }
 
     /* ── Spinner custom color ── */
@@ -690,155 +892,11 @@ if result:
 
         # ── Cards ──
         for company in result.companies:
-            status_class = {
-                "Active": "badge-active",
-                "In Liquidation": "badge-liquidation",
-                "Terminated": "badge-terminated",
-                "Suspended": "badge-terminated",
-            }.get(company.status, "badge-medium")
-
-            form_class = "badge-ie" if company.is_individual_entrepreneur else "badge-llc"
-            conf_class = f"badge-{company.confidence}"
-
-            # Build badges
-            badges = [
-                f'<span class="badge {form_class}">{_h(company.legal_form)}</span>',
-                f'<span class="badge {status_class}">{_h(company.status)}</span>',
-                f'<span class="badge {conf_class}">{_h(company.confidence)}</span>',
-            ]
-            if result.from_cache:
-                badges.append('<span class="badge badge-cache">Cached</span>')
-            if company.industry and company.industry_source == "heuristic":
-                badges.append('<span class="badge badge-heuristic">Heuristic</span>')
-            badges_html = " ".join(badges)
-
-            # Meta line
-            meta_parts = [f"<strong>ID:</strong> {_h(company.id_code)}"]
-            if company.registration_date:
-                meta_parts.append(f"<strong>Registered:</strong> {_h(company.registration_date)}")
-            if company.address:
-                meta_parts.append(f"<strong>Address:</strong> {_h(company.address)}")
-            meta_html = "&nbsp;&nbsp;|&nbsp;&nbsp;".join(meta_parts)
-
-            # Industry
-            if company.industry:
-                industry_html = (
-                    '<div class="industry-line">'
-                    '  <span class="label">Industry (inferred)</span><br>'
-                    f'  <span class="industry-value">{_h(company.industry)}</span>'
-                    '</div>'
-                )
-            else:
-                industry_html = (
-                    '<div class="industry-line">'
-                    '  <span class="label">Industry</span><br>'
-                    '  <span class="industry-missing">Not available in public registry</span>'
-                    '  <span class="industry-links">'
-                    '    &nbsp;· <a href="https://www.bia.ge/" target="_blank">BIA.ge ↗</a>'
-                    '    &nbsp;· <a href="https://rs.ge/" target="_blank">RS.ge ↗</a>'
-                    '  </span>'
-                    '</div>'
-                )
-
-            # Directors section
-            directors_html = ""
-            if company.directors:
-                rows = []
-                for d in company.directors:
-                    warn = " <span class='nominee-warning'>— may be nominee</span>" if d.is_nominee_warning else ""
-                    rows.append(f"<div class='person-row'>• {_h(d.name)}{warn}</div>")
-                directors_html = '<div class="section-title">Directors & Representatives</div>' + "".join(rows)
-
-            # Shareholders section
-            shareholders_html = ""
-            if company.shareholders:
-                rows = []
-                for s in company.shareholders:
-                    share_info = f" <span class='person-share'>({_h(s.share_percent)}%)</span>" if s.share_percent else ""
-                    rows.append(f"<div class='person-row'>• {_h(s.name)}{share_info}</div>")
-                shareholders_html = '<div class="section-title">Owners & Shareholders</div>' + "".join(rows)
-            elif not company.is_individual_entrepreneur:
-                shareholders_html = '<div class="section-title">Owners & Shareholders</div><div class="person-row" style="color: #8A7E70; font-style: italic;">No shareholder data available in this record.</div>'
-
-            # Footer
-            fetched_str = company.fetched_at.strftime('%Y-%m-%d %H:%M') if company.fetched_at else 'unknown'
-            footer_html = (
-                f'Source: <a href="{company.source_url}" target="_blank">companyinfo.ge</a>'
-                f'&nbsp;&nbsp;·&nbsp;&nbsp;'
-                f'Fetched: {fetched_str}'
-                f'&nbsp;&nbsp;·&nbsp;&nbsp;'
-                f'<a href="https://enreg.reestri.gov.ge/main.php?m=new_index&l=en" target="_blank">Verify on NAPR ↗</a>'
+            _render_company_card(
+                company,
+                from_cache=result.from_cache,
+                btn_key_prefix=result.query_type,
             )
-
-            # ── Assemble entire card as ONE HTML block (2-space indent, safe for Markdown) ──
-            card_lines = [
-                '<div class="result-card">',
-                f'  <div class="company-title">{_h(company.name)}</div>',
-                f'  <div class="badge-row">{badges_html}</div>',
-                f'  <div class="meta-line">{meta_html}</div>',
-                f'  {industry_html}',
-                f'  {directors_html}',
-                f'  {shareholders_html}',
-                f'  <div class="card-footer">{footer_html}</div>',
-                '</div>',
-            ]
-            card_html = '\n'.join(card_lines)
-            st.markdown(card_html, unsafe_allow_html=True)
-
-            # Government portal buttons
-            btn_col1, btn_col2, btn_col3 = st.columns([1, 1, 1])
-            with btn_col1:
-                # Copy ID to clipboard via JavaScript in an iframe (components.html)
-                copy_html = f"""<button id="copy-btn"
-  style="width:100%;padding:0.4rem 0.8rem;font-size:0.75rem;font-family:Inter,sans-serif;text-transform:uppercase;letter-spacing:0.08em;background-color:#FFFCF7;color:#1A1A1A;border:1px solid #C8BEB0;border-radius:2px;cursor:pointer;transition:background-color 0.15s;"
-  onmouseover="this.style.backgroundColor='#E85D4E';this.style.color='#FFFCF7';this.style.borderColor='#E85D4E'"
-  onmouseout="this.style.backgroundColor='#FFFCF7';this.style.color='#1A1A1A';this.style.borderColor='#C8BEB0'"
->📋 Copy ID</button>
-<script>
-  document.getElementById('copy-btn').addEventListener('click', function() {{
-    navigator.clipboard.writeText('{company.id_code}').then(function() {{
-      var btn = document.getElementById('copy-btn');
-      btn.innerText = '✓ Copied!';
-      setTimeout(function() {{ btn.innerText = '📋 Copy ID'; }}, 1500);
-    }}).catch(function() {{
-      var btn = document.getElementById('copy-btn');
-      btn.innerText = '✗ Failed';
-      setTimeout(function() {{ btn.innerText = '📋 Copy ID'; }}, 1500);
-    }});
-  }});
-</script>"""
-                components.html(copy_html, height=45)
-            with btn_col2:
-                st.link_button(
-                    "🏛️ Open my.gov.ge",
-                    url=mygov_company_url(company.id_code),
-                    key=f"mygov_{result.query_type}_{company.id_code}",
-                    use_container_width=True,
-                )
-            with btn_col3:
-                napr_key = f"napr_{result.query_type}_{company.id_code}"
-                if st.button("📄 Load NAPR Status", key=napr_key, use_container_width=True):
-                    with st.spinner("Fetching from NAPR..."):
-                        try:
-                            napr_data = fetch_napr_search(company.id_code)
-                            if napr_data:
-                                st.markdown(
-                                    f'<div style="background:#F5F0E8;border:1px solid #D8CFC0;padding:0.8rem 1rem;margin-bottom:1rem;font-size:0.85rem;">'
-                                    f'  <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.14em;color:#5A5048;margin-bottom:0.4rem;">NAPR Public Registry</div>'
-                                    f'  <strong>Status:</strong> {_h(napr_data.status)}<br>'
-                                    f'  <strong>Name:</strong> {_h(napr_data.name)}<br>'
-                                    f'  <strong>Legal Form:</strong> {_h(napr_data.legal_form)}<br>'
-                                    f'  <span style="font-size:0.7rem;color:#8A7E70;margin-top:0.3rem;display:block;">'
-                                    f'    Copy ID <strong>{_h(company.id_code)}</strong> and paste it into the NAPR search box.'
-                                    f'  </span>'
-                                    f'  <a href="https://enreg.reestri.gov.ge/main.php?m=new_index&l=en" target="_blank" style="color:#1A1A1A;text-decoration:underline;">Open NAPR Portal ↗</a>'
-                                    f'</div>',
-                                    unsafe_allow_html=True
-                                )
-                            else:
-                                st.warning("No NAPR data found for this ID.")
-                        except Exception as e:
-                            st.error(f"NAPR fetch failed: {e}")
 
         # ── Disclaimer ──
         st.markdown("""
@@ -905,144 +963,11 @@ if net_result:
         if net_result.companies:
             st.markdown('<div class="section-title" style="margin-top:1.5rem;">Company Details</div>', unsafe_allow_html=True)
             for company in net_result.companies:
-                status_class = {
-                    "Active": "badge-active",
-                    "In Liquidation": "badge-liquidation",
-                    "Terminated": "badge-terminated",
-                    "Suspended": "badge-terminated",
-                }.get(company.status, "badge-medium")
-
-                form_class = "badge-ie" if company.is_individual_entrepreneur else "badge-llc"
-                conf_class = f"badge-{company.confidence}"
-
-                badges = [
-                    f'<span class="badge {form_class}">{_h(company.legal_form)}</span>',
-                    f'<span class="badge {status_class}">{_h(company.status)}</span>',
-                    f'<span class="badge {conf_class}">{_h(company.confidence)}</span>',
-                ]
-                if company.industry and company.industry_source == "heuristic":
-                    badges.append('<span class="badge badge-heuristic">Heuristic</span>')
-                badges_html = " ".join(badges)
-
-                meta_parts = [f"<strong>ID:</strong> {_h(company.id_code)}"]
-                if company.registration_date:
-                    meta_parts.append(f"<strong>Registered:</strong> {_h(company.registration_date)}")
-                if company.address:
-                    meta_parts.append(f"<strong>Address:</strong> {_h(company.address)}")
-                meta_html = "&nbsp;&nbsp;|&nbsp;&nbsp;".join(meta_parts)
-
-                if company.industry:
-                    industry_html = (
-                        '<div class="industry-line">'
-                        '  <span class="label">Industry (inferred)</span><br>'
-                        f'  <span class="industry-value">{_h(company.industry)}</span>'
-                        '</div>'
-                    )
-                else:
-                    industry_html = (
-                        '<div class="industry-line">'
-                        '  <span class="label">Industry</span><br>'
-                        '  <span class="industry-missing">Not available in public registry</span>'
-                        '  <span class="industry-links">'
-                        '    &nbsp;· <a href="https://www.bia.ge/" target="_blank">BIA.ge ↗</a>'
-                        '    &nbsp;· <a href="https://rs.ge/" target="_blank">RS.ge ↗</a>'
-                        '  </span>'
-                        '</div>'
-                    )
-
-                directors_html = ""
-                if company.directors:
-                    rows = []
-                    for d in company.directors:
-                        warn = " <span class='nominee-warning'>— may be nominee</span>" if d.is_nominee_warning else ""
-                        rows.append(f"<div class='person-row'>• {_h(d.name)}{warn}</div>")
-                    directors_html = '<div class="section-title">Directors & Representatives</div>' + "".join(rows)
-
-                shareholders_html = ""
-                if company.shareholders:
-                    rows = []
-                    for s in company.shareholders:
-                        share_info = f" <span class='person-share'>({_h(s.share_percent)}%)</span>" if s.share_percent else ""
-                        rows.append(f"<div class='person-row'>• {_h(s.name)}{share_info}</div>")
-                    shareholders_html = '<div class="section-title">Owners & Shareholders</div>' + "".join(rows)
-                elif not company.is_individual_entrepreneur:
-                    shareholders_html = '<div class="section-title">Owners & Shareholders</div><div class="person-row" style="color: #8A7E70; font-style: italic;">No shareholder data available in this record.</div>'
-
-                fetched_str = company.fetched_at.strftime('%Y-%m-%d %H:%M') if company.fetched_at else 'unknown'
-                footer_html = (
-                    f'Source: <a href="{company.source_url}" target="_blank">companyinfo.ge</a>'
-                    f'&nbsp;&nbsp;·&nbsp;&nbsp;'
-                    f'Fetched: {fetched_str}'
-                    f'&nbsp;&nbsp;·&nbsp;&nbsp;'
-                    f'<a href="https://enreg.reestri.gov.ge/main.php?m=new_index&l=en" target="_blank">Verify on NAPR ↗</a>'
+                _render_company_card(
+                    company,
+                    from_cache=False,
+                    btn_key_prefix="net",
                 )
-
-                card_lines = [
-                    '<div class="result-card">',
-                    f'  <div class="company-title">{_h(company.name)}</div>',
-                    f'  <div class="badge-row">{badges_html}</div>',
-                    f'  <div class="meta-line">{meta_html}</div>',
-                    f'  {industry_html}',
-                    f'  {directors_html}',
-                    f'  {shareholders_html}',
-                    f'  <div class="card-footer">{footer_html}</div>',
-                    '</div>',
-                ]
-                st.markdown('\n'.join(card_lines), unsafe_allow_html=True)
-
-                # Government portal buttons
-                btn_col1, btn_col2, btn_col3 = st.columns([1, 1, 1])
-                with btn_col1:
-                    copy_html = f"""<button id="copy-btn"
-  style="width:100%;padding:0.4rem 0.8rem;font-size:0.75rem;font-family:Inter,sans-serif;text-transform:uppercase;letter-spacing:0.08em;background-color:#FFFCF7;color:#1A1A1A;border:1px solid #C8BEB0;border-radius:2px;cursor:pointer;transition:background-color 0.15s;"
-  onmouseover="this.style.backgroundColor='#E85D4E';this.style.color='#FFFCF7';this.style.borderColor='#E85D4E'"
-  onmouseout="this.style.backgroundColor='#FFFCF7';this.style.color='#1A1A1A';this.style.borderColor='#C8BEB0'"
->📋 Copy ID</button>
-<script>
-  document.getElementById('copy-btn').addEventListener('click', function() {{
-    navigator.clipboard.writeText('{company.id_code}').then(function() {{
-      var btn = document.getElementById('copy-btn');
-      btn.innerText = '✓ Copied!';
-      setTimeout(function() {{ btn.innerText = '📋 Copy ID'; }}, 1500);
-    }}).catch(function() {{
-      var btn = document.getElementById('copy-btn');
-      btn.innerText = '✗ Failed';
-      setTimeout(function() {{ btn.innerText = '📋 Copy ID'; }}, 1500);
-    }});
-  }});
-</script>"""
-                    components.html(copy_html, height=45)
-                with btn_col2:
-                    st.link_button(
-                        "🏛️ Open my.gov.ge",
-                        url=mygov_company_url(company.id_code),
-                        key=f"mygov_net_{company.id_code}",
-                        use_container_width=True,
-                    )
-                with btn_col3:
-                    napr_key = f"napr_net_{company.id_code}"
-                    if st.button("📄 Load NAPR Status", key=napr_key, use_container_width=True):
-                        with st.spinner("Fetching from NAPR..."):
-                            try:
-                                napr_data = fetch_napr_search(company.id_code)
-                                if napr_data:
-                                    st.markdown(
-                                        f'<div style="background:#F5F0E8;border:1px solid #D8CFC0;padding:0.8rem 1rem;margin-bottom:1rem;font-size:0.85rem;">'
-                                        f'  <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.14em;color:#5A5048;margin-bottom:0.4rem;">NAPR Public Registry</div>'
-                                        f'  <strong>Status:</strong> {_h(napr_data.status)}<br>'
-                                        f'  <strong>Name:</strong> {_h(napr_data.name)}<br>'
-                                        f'  <strong>Legal Form:</strong> {_h(napr_data.legal_form)}<br>'
-                                        f'  <span style="font-size:0.7rem;color:#8A7E70;margin-top:0.3rem;display:block;">'
-                                        f'    Copy ID <strong>{_h(company.id_code)}</strong> and paste it into the NAPR search box.'
-                                        f'  </span>'
-                                        f'  <a href="https://enreg.reestri.gov.ge/main.php?m=new_index&l=en" target="_blank" style="color:#1A1A1A;text-decoration:underline;">Open NAPR Portal ↗</a>'
-                                        f'</div>',
-                                        unsafe_allow_html=True
-                                    )
-                                else:
-                                    st.warning("No NAPR data found for this ID.")
-                            except Exception as e:
-                                st.error(f"NAPR fetch failed: {e}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1051,8 +976,9 @@ if net_result:
 if not result and not net_result:
     st.markdown("""
     <div class="empty-state">
-        <div class="big">Welcome 🍣</div>
-        <div style="font-size: 0.82rem; color: #7A7060;">
+        <span class="emoji">🍣</span>
+        <div class="big">Welcome to Irina's Compass</div>
+        <div style="font-size: 0.85rem; color: #7A7060; line-height: 1.6;">
             Search by company ID, name, or owner to explore the Georgian business registry.<br>
             Or use <strong>🔗 Network</strong> to map ownership relationships and spot red flags.
         </div>
