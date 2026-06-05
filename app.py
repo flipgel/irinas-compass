@@ -788,26 +788,26 @@ if result:
             # Government portal buttons
             btn_col1, btn_col2, btn_col3 = st.columns([1, 1, 1])
             with btn_col1:
-                # Copy ID to clipboard via JavaScript
-                copy_id = f"copy_{result.query_type}_{company.id_code}"
-                st.markdown(
-                    f'<button id="{copy_id}" '
-                    f'onclick="navigator.clipboard.writeText(\'{company.id_code}\').then(() => {{'
-                    f'  this.innerText=\'✓ Copied!\'; '
-                    f'  setTimeout(() => this.innerText=\'📋 Copy ID\', 1500);'
-                    f'}}).catch(() => {{'
-                    f'  this.innerText=\'✗ Failed\'; '
-                    f'  setTimeout(() => this.innerText=\'📋 Copy ID\', 1500);'
-                    f'}})" '
-                    f'style="width:100%;padding:0.4rem 0.8rem;font-size:0.75rem;'
-                    f'font-family:Inter,sans-serif;text-transform:uppercase;letter-spacing:0.08em;'
-                    f'background-color:#FFFCF7;color:#1A1A1A;border:1px solid #C8BEB0;'
-                    f'border-radius:2px;cursor:pointer;transition:background-color 0.15s;" '
-                    f'onmouseover="this.style.backgroundColor=\'#E85D4E\';this.style.color=\'#FFFCF7\';this.style.borderColor=\'#E85D4E\'" '
-                    f'onmouseout="this.style.backgroundColor=\'#FFFCF7\';this.style.color=\'#1A1A1A\';this.style.borderColor=\'#C8BEB0\'" '
-                    f'>📋 Copy ID</button>',
-                    unsafe_allow_html=True
-                )
+                # Copy ID to clipboard via JavaScript in an iframe (components.html)
+                copy_html = f"""<button id="copy-btn"
+  style="width:100%;padding:0.4rem 0.8rem;font-size:0.75rem;font-family:Inter,sans-serif;text-transform:uppercase;letter-spacing:0.08em;background-color:#FFFCF7;color:#1A1A1A;border:1px solid #C8BEB0;border-radius:2px;cursor:pointer;transition:background-color 0.15s;"
+  onmouseover="this.style.backgroundColor='#E85D4E';this.style.color='#FFFCF7';this.style.borderColor='#E85D4E'"
+  onmouseout="this.style.backgroundColor='#FFFCF7';this.style.color='#1A1A1A';this.style.borderColor='#C8BEB0'"
+>📋 Copy ID</button>
+<script>
+  document.getElementById('copy-btn').addEventListener('click', function() {{
+    navigator.clipboard.writeText('{company.id_code}').then(function() {{
+      var btn = document.getElementById('copy-btn');
+      btn.innerText = '✓ Copied!';
+      setTimeout(function() {{ btn.innerText = '📋 Copy ID'; }}, 1500);
+    }}).catch(function() {{
+      var btn = document.getElementById('copy-btn');
+      btn.innerText = '✗ Failed';
+      setTimeout(function() {{ btn.innerText = '📋 Copy ID'; }}, 1500);
+    }});
+  }});
+</script>"""
+                components.html(copy_html, height=45)
             with btn_col2:
                 st.link_button(
                     "🏛️ Open my.gov.ge",
@@ -993,25 +993,25 @@ if net_result:
                 # Government portal buttons
                 btn_col1, btn_col2, btn_col3 = st.columns([1, 1, 1])
                 with btn_col1:
-                    copy_id = f"copy_net_{company.id_code}"
-                    st.markdown(
-                        f'<button id="{copy_id}" '
-                        f'onclick="navigator.clipboard.writeText(\'{company.id_code}\').then(() => {{'
-                        f'  this.innerText=\'✓ Copied!\'; '
-                        f'  setTimeout(() => this.innerText=\'📋 Copy ID\', 1500);'
-                        f'}}).catch(() => {{'
-                        f'  this.innerText=\'✗ Failed\'; '
-                        f'  setTimeout(() => this.innerText=\'📋 Copy ID\', 1500);'
-                        f'}})" '
-                        f'style="width:100%;padding:0.4rem 0.8rem;font-size:0.75rem;'
-                        f'font-family:Inter,sans-serif;text-transform:uppercase;letter-spacing:0.08em;'
-                        f'background-color:#FFFCF7;color:#1A1A1A;border:1px solid #C8BEB0;'
-                        f'border-radius:2px;cursor:pointer;transition:background-color 0.15s;" '
-                        f'onmouseover="this.style.backgroundColor=\'#E85D4E\';this.style.color=\'#FFFCF7\';this.style.borderColor=\'#E85D4E\'" '
-                        f'onmouseout="this.style.backgroundColor=\'#FFFCF7\';this.style.color=\'#1A1A1A\';this.style.borderColor=\'#C8BEB0\'" '
-                        f'>📋 Copy ID</button>',
-                        unsafe_allow_html=True
-                    )
+                    copy_html = f"""<button id="copy-btn"
+  style="width:100%;padding:0.4rem 0.8rem;font-size:0.75rem;font-family:Inter,sans-serif;text-transform:uppercase;letter-spacing:0.08em;background-color:#FFFCF7;color:#1A1A1A;border:1px solid #C8BEB0;border-radius:2px;cursor:pointer;transition:background-color 0.15s;"
+  onmouseover="this.style.backgroundColor='#E85D4E';this.style.color='#FFFCF7';this.style.borderColor='#E85D4E'"
+  onmouseout="this.style.backgroundColor='#FFFCF7';this.style.color='#1A1A1A';this.style.borderColor='#C8BEB0'"
+>📋 Copy ID</button>
+<script>
+  document.getElementById('copy-btn').addEventListener('click', function() {{
+    navigator.clipboard.writeText('{company.id_code}').then(function() {{
+      var btn = document.getElementById('copy-btn');
+      btn.innerText = '✓ Copied!';
+      setTimeout(function() {{ btn.innerText = '📋 Copy ID'; }}, 1500);
+    }}).catch(function() {{
+      var btn = document.getElementById('copy-btn');
+      btn.innerText = '✗ Failed';
+      setTimeout(function() {{ btn.innerText = '📋 Copy ID'; }}, 1500);
+    }});
+  }});
+</script>"""
+                    components.html(copy_html, height=45)
                 with btn_col2:
                     st.link_button(
                         "🏛️ Open my.gov.ge",
