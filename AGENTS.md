@@ -14,10 +14,13 @@
 ## Architecture
 
 ```
-app.py              # Streamlit UI (sushi theme, 4 tabs)
+app.py              # Streamlit UI (sushi theme, 5 tabs)
 scraper.py          # HTTP client for api.companyinfo.ge
-models.py           # Dataclasses: Company, Person, SearchResult, NetworkResult
-cache.py            # SQLite cache with 7-day TTL + search history
+models.py           # Dataclasses: Company, Person, SearchResult, NetworkResult, NewsStory, NewsArticle
+news.py             # RSS news fetcher + deduplication + coverage analysis + blindspot detection
+news_ui.py          # News tab renderer (bias bars, factuality meters, ownership badges)
+news_sources.json   # Curated source metadata: 25 outlets with bias/ownership/factuality ratings
+cache.py            # SQLite cache with 7-day TTL + 1-hour news TTL + search history
 network.py          # Network graph builder + risk detection + Mermaid generation
 industry_heuristic.py  # Name-based industry keyword matching
 utils.py            # Input type detection, fuzzy matching
@@ -100,6 +103,24 @@ Reverse lookup: search person by Georgian name → find all linked companies.
 
 **Limits:** Max 8 companies, 3 co-directors per company, 0.5s delays.
 
+### Tab 5: 📰 News
+**Irina's Newsroom** — A standalone news intelligence module inspired by Ground News.
+
+**Features:**
+- **Bias visualization:** Every article tagged with Left / Lean Left / Center / Lean Right / Right
+- **Factuality ratings:** High / Mixed / Low scores per source
+- **Ownership transparency:** Parent company displayed for every outlet
+- **Coverage comparison:** Stacked bias bars showing how many sources from each side cover a story
+- **Blindspot detection:** Flags stories receiving lopsided coverage (one side covers it, the other ignores it)
+- **Topic filtering:** Politics, War, Economy, Tech, Health, Climate, Crime, Immigration, Sport, Entertainment
+- **Search:** Full-text search across headlines and article summaries
+- **Sorting:** Most recent, most coverage, blindspots first, full spectrum
+- **Stats dashboard:** Real-time counts of stories, blindspots, full-spectrum coverage, articles by bias
+
+**Data sources:** 25 curated global news outlets via RSS (BBC, Reuters, NYT, Guardian, WSJ, Fox, NPR, CNN, Al Jazeera, etc.)
+**Cache:** 1-hour TTL for news (vs 7 days for business data)
+**Methodology:** Bias/factuality aggregated from Ad Fontes Media, AllSides, Media Bias/Fact Check
+
 ---
 
 ## Design System
@@ -123,6 +144,9 @@ Reverse lookup: search person by Georgian name → find all linked companies.
 3. **Georgian script required for person search** — The API does not support Latin transliterations. Users must type in Georgian.
 4. **Network graph is 1-hop only** — To avoid API rate limits and complexity.
 5. **Cache is 7 days** — Old data may be stale. NAPR is the authoritative source.
+6. **News bias is publication-level** — Not article-level. Bias ratings reflect the outlet's general editorial tendency, not the specific slant of an individual article.
+7. **RSS feed reliability** — Some news sources block or restrict RSS access. The engine gracefully handles failures and reports successful source count.
+8. **No personalization** — No user accounts, so no personalized feeds or reading history persistence.
 
 ---
 

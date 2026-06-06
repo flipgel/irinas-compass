@@ -1,7 +1,154 @@
 """Data models for Irina's Compass."""
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict
+
+
+@dataclass
+class NewsSource:
+    """A news outlet with bias and ownership metadata."""
+    name: str
+    rss: str
+    bias: str  # left, lean_left, center, lean_right, right
+    bias_score: int  # -100 to +100
+    factuality: str  # high, mixed, low
+    factuality_score: int  # 0-100
+    ownership: str
+    country: str
+    category: str
+
+
+@dataclass
+class NewsArticle:
+    """A single news article from an RSS feed."""
+    title: str
+    link: str
+    source: str
+    published: Optional[datetime] = None
+    summary: Optional[str] = None
+    bias: str = "unknown"
+    bias_score: int = 0
+    factuality: str = "unknown"
+    factuality_score: int = 50
+    ownership: str = "Unknown"
+    topics: List[str] = field(default_factory=list)
+
+
+@dataclass
+class NewsStory:
+    """A group of articles about the same topic/event."""
+    story_id: str
+    headline: str
+    articles: List[NewsArticle] = field(default_factory=list)
+    topics: List[str] = field(default_factory=list)
+    first_seen: datetime = field(default_factory=datetime.now)
+    
+    @property
+    def coverage_left(self) -> int:
+        return sum(1 for a in self.articles if a.bias in ("left", "lean_left"))
+    
+    @property
+    def coverage_center(self) -> int:
+        return sum(1 for a in self.articles if a.bias == "center")
+    
+    @property
+    def coverage_right(self) -> int:
+        return sum(1 for a in self.articles if a.bias in ("right", "lean_right"))
+    
+    @property
+    def coverage_total(self) -> int:
+        return len(self.articles)
+    
+    @property
+    def bias_spread(self) -> str:
+        """Describe the ideological spread of coverage."""
+        if self.coverage_total == 0:
+            return "none"
+        left = self.coverage_left
+        center = self.coverage_center
+        right = self.coverage_right
+        
+        if left > 0 and right > 0 and center > 0:
+            return "full_spectrum"
+        elif left > 0 and right > 0:
+            return "bipartisan"
+        elif left > 0 and center > 0:
+            return "left_center"
+        elif right > 0 and center > 0:
+            return "right_center"
+        elif left > 0:
+            return "left_only"
+        elif right > 0:
+            return "right_only"
+        elif center > 0:
+            return "center_only"
+        return "mixed"
+    
+    @property
+    def avg_factuality(self) -> float:
+        if not self.articles:
+            return 50.0
+        return sum(a.factuality_score for a in self.articles) / len(self.articles)
+    
+    @property
+    def is_blindspot(self) -> bool:
+        """A story covered predominantly by one ideological side.
+        
+        Ground News-style blindspot: a story with political undertones
+        that receives lopsided coverage (one side covers it, the other ignores).
+        Requires at least 2 total articles to qualify.
+        """
+        if self.coverage_total < 2:
+            return False
+        left = self.coverage_left
+        right = self.coverage_right
+        # Blindspot: one side covers it significantly, the other essentially ignores it
+        if (left >= 2 and right == 0) or (right >= 2 and left == 0):
+            return True
+        # Also flag if coverage is heavily skewed (e.g., 4:1 or worse)
+        if left > 0 and right > 0:
+            ratio = max(left, right) / min(left, right)
+            if ratio >= 4:
+                return True
+        return False
+    
+    @property
+    def blindspot_direction(self) -> Optional[str]:
+        if not self.is_blindspot:
+            return None
+        if self.coverage_left > self.coverage_right:
+            return "left"
+        if self.coverage_right > self.coverage_left:
+            return "right"
+        return None
+    
+    @property
+    def ownership_diversity(self) -> Dict[str, int]:
+        """Count unique owners covering this story."""
+        owners = {}
+        for a in self.articles:
+            owners[a.ownership] = owners.get(a.ownership, 0) + 1
+        return owners
+    
+    @property
+    def latest_article(self) -> Optional[NewsArticle]:
+        if not self.articles:
+            return None
+        dated = [a for a in self.articles if a.published]
+        if dated:
+            return max(dated, key=lambda x: x.published or datetime.min)
+        return self.articles[0]
+
+
+@dataclass
+class NewsResult:
+    """Result of a news fetch operation."""
+    stories: List[NewsStory] = field(default_factory=list)
+    sources_fetched: int = 0
+    articles_fetched: int = 0
+    fetch_time_ms: int = 0
+    error: Optional[str] = None
+    cached: bool = False
 
 
 @dataclass

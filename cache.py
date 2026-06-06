@@ -5,10 +5,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional
 
-from models import Company, Person, SearchResult
+from models import Company, Person, SearchResult, NewsResult
 
 DB_PATH = Path(__file__).parent / "data" / "cache.db"
 CACHE_TTL_DAYS = 7
+NEWS_CACHE_TTL_HOURS = 1
 
 
 def _ensure_db():
@@ -49,6 +50,13 @@ def _ensure_db():
             result_ids TEXT,
             searched_at TEXT,
             from_cache INTEGER
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS news_cache (
+            cache_key TEXT PRIMARY KEY,
+            data TEXT,
+            fetched_at TEXT
         )
     """)
     conn.commit()
@@ -183,3 +191,113 @@ def get_recent_searches(limit: int = 20) -> List[SearchResult]:
             )
         )
     return results
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  NEWS CACHE (short TTL)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_news_cache(cache_key: str) -> Optional[NewsResult]:
+    """Retrieve cached news result if not expired."""
+    _ensure_db()
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT data, fetched_at FROM news_cache WHERE cache_key = ?", (cache_key,))
+    row = c.fetchone()
+    conn.close()
+    if not row:
+        return None
+
+    fetched_at = datetime.fromisoformat(row[1]) if row[1] else None
+    if fetched_at and datetime.now() - fetched_at > timedelta(hours=NEWS_CACHE_TTL_HOURS):
+        return None  # Expired
+
+    try:
+        import json
+        data = json.loads(row[0])
+        from models import NewsStory, NewsArticle
+        stories = []
+        for s_data in data.get("stories", []):
+            articles = []
+            for a_data in s_data.get("articles", []):
+                published = None
+                if a_data.get("published"):
+                    try:
+                        published = datetime.fromisoformat(a_data["published"])
+                    except Exception:
+                        pass
+                articles.append(NewsArticle(
+                    title=a_data["title"],
+                    link=a_data["link"],
+                    source=a_data["source"],
+                    published=published,
+                    summary=a_data.get("summary"),
+                    bias=a_data.get("bias", "unknown"),
+                    bias_score=a_data.get("bias_score", 0),
+                    factuality=a_data.get("factuality", "unknown"),
+                    factuality_score=a_data.get("factuality_score", 50),
+                    ownership=a_data.get("ownership", "Unknown"),
+                    topics=a_data.get("topics", []),
+                ))
+            stories.append(NewsStory(
+                story_id=s_data["story_id"],
+                headline=s_data["headline"],
+                articles=articles,
+                topics=s_data.get("topics", []),
+                first_seen=datetime.fromisoformat(s_data["first_seen"]) if s_data.get("first_seen") else datetime.now(),
+            ))
+        return NewsResult(
+            stories=stories,
+            sources_fetched=data.get("sources_fetched", 0),
+            articles_fetched=data.get("articles_fetched", 0),
+            fetch_time_ms=data.get("fetch_time_ms", 0),
+            cached=True,
+        )
+    except Exception as e:
+        logger = __import__("logging").getLogger(__name__)
+        logger.warning(f"Failed to deserialize news cache: {e}")
+        return None
+
+
+def save_news_cache(cache_key: str, result: NewsResult):
+    """Save news result to cache."""
+    _ensure_db()
+    import json
+    stories_data = []
+    for s in result.stories:
+        articles_data = []
+        for a in s.articles:
+            articles_data.append({
+                "title": a.title,
+                "link": a.link,
+                "source": a.source,
+                "published": a.published.isoformat() if a.published else None,
+                "summary": a.summary,
+                "bias": a.bias,
+                "bias_score": a.bias_score,
+                "factuality": a.factuality,
+                "factuality_score": a.factuality_score,
+                "ownership": a.ownership,
+                "topics": a.topics,
+            })
+        stories_data.append({
+            "story_id": s.story_id,
+            "headline": s.headline,
+            "articles": articles_data,
+            "topics": s.topics,
+            "first_seen": s.first_seen.isoformat(),
+        })
+    payload = json.dumps({
+        "stories": stories_data,
+        "sources_fetched": result.sources_fetched,
+        "articles_fetched": result.articles_fetched,
+        "fetch_time_ms": result.fetch_time_ms,
+    })
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "INSERT OR REPLACE INTO news_cache (cache_key, data, fetched_at) VALUES (?, ?, ?)",
+        (cache_key, payload, datetime.now().isoformat()),
+    )
+    conn.commit()
+    conn.close()

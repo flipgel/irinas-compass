@@ -174,6 +174,7 @@ from models import SearchResult
 from network import build_person_network, build_company_network, generate_mermaid
 from napr_scraper import fetch_napr_search
 from gov_links import mygov_company_url
+from news_ui import render_news_tab, render_source_legend
 
 # Run DB migration on startup (adds industry columns if missing)
 _ensure_db()
@@ -182,8 +183,8 @@ _ensure_db()
 #  PAGE CONFIG
 # ═══════════════════════════════════════════════════════════════════════════════
 st.set_page_config(
-    page_title="Irina's Compass · Georgian Business Registry",
-    page_icon="🍣",
+    page_title="Irina's Compass · Business Registry & Newsroom",
+    page_icon="🧭",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -667,7 +668,7 @@ st.markdown("""
 # ═══════════════════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown('<div style="font-family: Inter; font-size: 1.3rem; font-weight: 700; color: #1A1A1A; margin-bottom: 0.2rem; letter-spacing: -0.02em;">Irina\'s Compass</div>', unsafe_allow_html=True)
-    st.markdown('<div style="font-size: 0.68rem; color: #5A5048; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 1.5rem;">Georgian Business Lookup</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size: 0.68rem; color: #5A5048; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 1.5rem;">Business Registry · Newsroom</div>', unsafe_allow_html=True)
     st.markdown('<div class="label" style="margin-bottom: 0.6rem;">Recent Searches</div>', unsafe_allow_html=True)
 
     recent = get_recent_searches(limit=12)
@@ -699,15 +700,20 @@ with st.sidebar:
     st.markdown("""
     <div style="margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #9E9486; font-size: 0.68rem; color: #7A7060; line-height: 1.5;">
         Data: <a href="https://www.companyinfo.ge" target="_blank" style="color: #5A5048;">companyinfo.ge</a> (TI Georgia)<br>
-        Cache: 7 days · <a href="https://github.com/flipgel/irinas-compass" target="_blank" style="color: #5A5048;">GitHub ↗</a>
+        News: 25+ curated sources with bias & ownership data<br>
+        <a href="https://github.com/flipgel/irinas-compass" target="_blank" style="color: #5A5048;">GitHub ↗</a>
     </div>
     """, unsafe_allow_html=True)
+    
+    # News source legend (collapsible)
+    with st.expander("📊 News bias legend", expanded=False):
+        render_source_legend()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  SEARCH TABS
 # ═══════════════════════════════════════════════════════════════════════════════
-tab_vat, tab_company, tab_owner, tab_network = st.tabs(["By ID Code", "By Company Name", "By Owner Name", "🔗 Network"])
+tab_vat, tab_company, tab_owner, tab_network, tab_news = st.tabs(["By ID Code", "By Company Name", "By Owner Name", "🔗 Network", "📰 News"])
 
 
 def do_search(query: str, query_type: str):
@@ -836,6 +842,10 @@ with tab_network:
                         st.error(f"Network analysis failed: {e}")
             else:
                 st.warning("Please enter a name")
+
+
+with tab_news:
+    render_news_tab()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
