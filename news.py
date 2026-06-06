@@ -14,10 +14,11 @@ from urllib.parse import urlparse
 
 import feedparser
 import requests
+import trafilatura
 from rapidfuzz import fuzz
 
 from models import NewsSource, NewsArticle, NewsStory, NewsResult
-from cache import get_news_cache, save_news_cache
+from cache import get_news_cache, save_news_cache, get_article_cache, save_article_cache
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +103,39 @@ def _clean_html(text: str) -> str:
     return text
 
 
+def _extract_thumbnail(entry) -> Optional[str]:
+    """Extract best thumbnail image from RSS entry."""
+    # media:thumbnail
+    if hasattr(entry, "media_thumbnail") and entry.media_thumbnail:
+        thumbs = entry.media_thumbnail
+        if isinstance(thumbs, list) and thumbs:
+            # Pick largest thumbnail
+            best = max(thumbs, key=lambda t: int(t.get("width", "0") or "0"))
+            return best.get("url")
+    # media:content with medium=image
+    if hasattr(entry, "media_content") and entry.media_content:
+        contents = entry.media_content
+        if isinstance(contents, list):
+            for mc in contents:
+                if mc.get("medium") == "image" or mc.get("type", "").startswith("image/"):
+                    return mc.get("url")
+        elif isinstance(contents, dict):
+            if contents.get("medium") == "image" or contents.get("type", "").startswith("image/"):
+                return contents.get("url")
+    # enclosure with image
+    if hasattr(entry, "enclosures") and entry.enclosures:
+        for enc in entry.enclosures:
+            if enc.get("type", "").startswith("image/"):
+                return enc.get("href")
+    # Look for image in summary/description HTML
+    html_text = getattr(entry, "summary", "") or getattr(entry, "description", "")
+    if html_text:
+        m = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', html_text)
+        if m:
+            return m.group(1)
+    return None
+
+
 def _extract_topics(title: str, summary: str) -> List[str]:
     """Simple keyword extraction for topic grouping."""
     text = f"{title} {summary}".lower()
@@ -150,12 +184,14 @@ def fetch_source(source: NewsSource) -> List[NewsArticle]:
             published = _parse_rss_date(entry)
             topics = _extract_topics(title, summary)
 
+            thumbnail = _extract_thumbnail(entry)
             article = NewsArticle(
                 title=title,
                 link=link,
                 source=source.name,
                 published=published,
                 summary=summary[:400] if summary else None,
+                thumbnail=thumbnail,
                 bias=source.bias,
                 bias_score=source.bias_score,
                 factuality=source.factuality,
@@ -258,6 +294,120 @@ def analyze_coverage(stories: List[NewsStory]) -> Dict:
         "center_articles": center_count,
         "right_articles": right_count,
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  FULL ARTICLE EXTRACTION (on-demand)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+YOUTUBE_PATTERNS = [
+    re.compile(r'(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)([a-zA-Z0-9_-]{11})'),
+    re.compile(r'youtube\.com/embed/([a-zA-Z0-9_-]{11})'),
+]
+
+
+def _detect_videos(html_text: str) -> List[str]:
+    """Detect YouTube video embeds in HTML."""
+    videos = []
+    seen = set()
+    for pattern in YOUTUBE_PATTERNS:
+        for match in pattern.finditer(html_text):
+            vid = match.group(1)
+            if vid not in seen:
+                seen.add(vid)
+                videos.append(f"https://www.youtube.com/embed/{vid}")
+    # Also detect generic iframe video embeds
+    for match in re.finditer(r'<iframe[^>]+src=["\'](https?://[^"\']+)["\']', html_text):
+        url = match.group(1)
+        if any(x in url for x in ["youtube", "youtu.be", "vimeo", "dailymotion"]):
+            if url not in seen:
+                seen.add(url)
+                videos.append(url)
+    return videos
+
+
+def fetch_full_article(article: NewsArticle) -> NewsArticle:
+    """Fetch and extract full article text, images, and videos on demand.
+    
+    Mutates and returns the article with full_text, article_images, video_urls populated.
+    """
+    # Check cache
+    cached = get_article_cache(article.link)
+    if cached:
+        article.full_text = cached["full_text"]
+        article.article_images = cached["images"]
+        article.video_urls = cached["videos"]
+        return article
+
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        resp = requests.get(article.link, headers=headers, timeout=15)
+        resp.raise_for_status()
+        html = resp.text
+
+        # Extract main content with trafilatura
+        extracted = trafilatura.extract(
+            html,
+            include_images=True,
+            include_links=False,
+            include_comments=False,
+            include_tables=False,
+            deduplicate=True,
+            url=article.link,
+        )
+
+        # Extract images from HTML (trafilatura include_images returns markdown image refs)
+        images = []
+        if extracted:
+            # Find markdown image syntax: ![alt](url)
+            for match in re.finditer(r'!\[([^\]]*)\]\((https?://[^\)]+)\)', extracted):
+                img_url = match.group(2).strip()
+                if img_url and img_url not in images:
+                    images.append(img_url)
+            # Also find bare image URLs in the extracted text
+            for match in re.finditer(r'https?://[^\s\)]+\.(?:jpg|jpeg|png|webp|gif)', extracted):
+                img_url = match.group(0)
+                if img_url not in images:
+                    images.append(img_url)
+
+        # Fallback: extract images directly from HTML
+        if not images:
+            for match in re.finditer(r'<img[^>]+src=["\'](https?://[^"\']+)["\']', html):
+                img_url = match.group(1)
+                if img_url and img_url not in images and not any(x in img_url.lower() for x in ["icon", "logo", "avatar", "tracking", "pixel"]):
+                    images.append(img_url)
+
+        # Detect videos
+        videos = _detect_videos(html)
+
+        # Clean up extracted text
+        full_text = extracted or ""
+        if full_text:
+            # Remove markdown image references for cleaner text
+            full_text = re.sub(r'!\[([^\]]*)\]\(([^\)]+)\)', r'', full_text)
+            # Clean up extra whitespace
+            full_text = re.sub(r'\n{3,}', '\n\n', full_text).strip()
+
+        article.full_text = full_text[:8000] if full_text else None
+        article.article_images = images[:8]  # Limit images
+        article.video_urls = videos
+
+        # Save to cache
+        save_article_cache(
+            article.link,
+            article.title,
+            article.full_text or "",
+            article.article_images,
+            article.video_urls,
+        )
+
+    except Exception as e:
+        logger.warning(f"Full article extraction failed for {article.link}: {e}")
+        article.full_text = article.summary or "Could not load full article. Click the source link to read on the publisher's site."
+
+    return article
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

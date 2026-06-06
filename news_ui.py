@@ -1,10 +1,11 @@
-"""News UI rendering module for Irina's Compass.
+"""News UI rendering module for Irina's Compass — Visual Reading Experience.
 
 Provides all Streamlit components for the news tab:
-- Bias bars, factuality meters, ownership badges
+- Thumbnail-rich story cards with readable article previews
+- Full article extraction with inline images and video embeds
+- Bias bars, factuality meters, ownership badges (secondary overlay)
 - Story cards with coverage visualization
 - Blindspot indicators
-- Filter controls and stats dashboard
 """
 import html
 import random
@@ -12,10 +13,12 @@ from datetime import datetime
 from typing import List, Optional
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from models import NewsStory, NewsArticle, NewsResult
 from news import (
     fetch_news,
+    fetch_full_article,
     analyze_coverage,
     get_blindspot_stories,
     get_full_spectrum_stories,
@@ -29,16 +32,16 @@ def _h(text: str) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  COLOR SYSTEM (aligned with sushi theme + news semantics)
+#  COLOR SYSTEM
 # ═══════════════════════════════════════════════════════════════════════════════
 
 BIAS_COLORS = {
-    "left": "#2563EB",         # Blue-600
-    "lean_left": "#60A5FA",    # Blue-400
-    "center": "#9CA3AF",       # Gray-400
-    "lean_right": "#F87171",   # Red-400
-    "right": "#DC2626",        # Red-600
-    "unknown": "#D1D5DB",      # Gray-300
+    "left": "#2563EB",
+    "lean_left": "#60A5FA",
+    "center": "#9CA3AF",
+    "lean_right": "#F87171",
+    "right": "#DC2626",
+    "unknown": "#D1D5DB",
 }
 
 BIAS_LABELS = {
@@ -51,15 +54,9 @@ BIAS_LABELS = {
 }
 
 FACTUALITY_COLORS = {
-    "high": "#16A34A",   # Green-600
-    "mixed": "#EAB308",  # Yellow-500
-    "low": "#DC2626",    # Red-600
-}
-
-FACTUALITY_BG = {
-    "high": "#DCFCE7",
-    "mixed": "#FEF9C3",
-    "low": "#FEE2E2",
+    "high": "#16A34A",
+    "mixed": "#EAB308",
+    "low": "#DC2626",
 }
 
 
@@ -76,7 +73,7 @@ def _bias_badge_html(bias: str) -> str:
 
 def _factuality_badge_html(factuality: str, score: int) -> str:
     color = FACTUALITY_COLORS.get(factuality, "#9CA3AF")
-    bg = FACTUALITY_BG.get(factuality, "#F3F4F6")
+    bg = {"high": "#DCFCE7", "mixed": "#FEF9C3", "low": "#FEE2E2"}.get(factuality, "#F3F4F6")
     label = factuality.capitalize()
     return (
         f'<span style="display:inline-block;padding:2px 8px;border-radius:2px;'
@@ -87,56 +84,119 @@ def _factuality_badge_html(factuality: str, score: int) -> str:
 
 
 def _coverage_bar_html(story: NewsStory) -> str:
-    """Render a stacked bar showing left/center/right coverage proportion."""
     total = story.coverage_total
     if total == 0:
         return '<div style="height:4px;background:#E5E7EB;border-radius:2px;"></div>'
-    
     left_pct = (story.coverage_left / total) * 100
     center_pct = (story.coverage_center / total) * 100
     right_pct = (story.coverage_right / total) * 100
-    
     segments = []
     if left_pct > 0:
-        segments.append(f'<div style="width:{left_pct:.1f}%;height:100%;background:{BIAS_COLORS['left']};"></div>')
+        segments.append(f'<div style="width:{left_pct:.1f}%;height:100%;background:{BIAS_COLORS["left"]};"></div>')
     if center_pct > 0:
-        segments.append(f'<div style="width:{center_pct:.1f}%;height:100%;background:{BIAS_COLORS['center']};"></div>')
+        segments.append(f'<div style="width:{center_pct:.1f}%;height:100%;background:{BIAS_COLORS["center"]};"></div>')
     if right_pct > 0:
-        segments.append(f'<div style="width:{right_pct:.1f}%;height:100%;background:{BIAS_COLORS['right']};"></div>')
-    
-    return (
-        f'<div style="display:flex;height:4px;border-radius:2px;overflow:hidden;background:#E5E7EB;">'
-        f'{"".join(segments)}</div>'
-    )
-
-
-def _factuality_meter_html(score: float) -> str:
-    """Render a small horizontal meter for factuality score."""
-    pct = max(0, min(100, score))
-    if pct >= 85:
-        color = "#16A34A"
-    elif pct >= 65:
-        color = "#EAB308"
-    else:
-        color = "#DC2626"
-    return (
-        f'<div style="display:flex;align-items:center;gap:6px;">'
-        f'<div style="flex:1;height:3px;background:#E5E7EB;border-radius:2px;overflow:hidden;">'
-        f'<div style="width:{pct:.0f}%;height:100%;background:{color};border-radius:2px;"></div>'
-        f'</div>'
-        f'<span style="font-size:0.65rem;color:#6B7280;font-weight:500;">{pct:.0f}</span>'
-        f'</div>'
-    )
+        segments.append(f'<div style="width:{right_pct:.1f}%;height:100%;background:{BIAS_COLORS["right"]};"></div>')
+    return f'<div style="display:flex;height:4px;border-radius:2px;overflow:hidden;background:#E5E7EB;">{"".join(segments)}</div>'
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  STORY CARD RENDERER
+#  ARTICLE READER (full text + images + video)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def render_article_reader(article: NewsArticle, idx: int):
+    """Render a full article reading experience with text, images, and video."""
+    
+    # Ensure full text is loaded
+    if article.full_text is None:
+        with st.spinner(f"Loading from {article.source}..."):
+            article = fetch_full_article(article)
+    
+    # Source header
+    st.markdown(f"""
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:0.8rem;flex-wrap:wrap;">
+        {_bias_badge_html(article.bias)}
+        {_factuality_badge_html(article.factuality, article.factuality_score)}
+        <span style="font-size:0.7rem;color:#6B7280;">{_h(article.source)}</span>
+        <span style="font-size:0.65rem;color:#9CA3AF;">· {_h(article.ownership[:50])}</span>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Article title
+    st.markdown(f"<h3 style='font-size:1.1rem;font-weight:600;color:#1A1A1A;margin-bottom:0.6rem;line-height:1.35;'>{_h(article.title)}</h3>", unsafe_allow_html=True)
+    
+    # Article images (from extraction)
+    if article.article_images:
+        cols = st.columns(min(len(article.article_images), 3))
+        for i, img_url in enumerate(article.article_images[:3]):
+            with cols[i]:
+                try:
+                    st.image(img_url, use_container_width=True)
+                except Exception:
+                    pass
+    
+    # Video embeds
+    for vid_url in article.video_urls[:2]:
+        if "youtube" in vid_url or "youtu.be" in vid_url:
+            # Extract video ID for embed
+            vid_id = None
+            if "embed/" in vid_url:
+                vid_id = vid_url.split("embed/")[-1].split("?")[0]
+            elif "v=" in vid_url:
+                vid_id = vid_url.split("v=")[-1].split("&")[0]
+            elif "youtu.be/" in vid_url:
+                vid_id = vid_url.split("youtu.be/")[-1].split("?")[0]
+            
+            if vid_id:
+                components.html(
+                    f'<iframe width="100%" height="360" src="https://www.youtube.com/embed/{vid_id}" '
+                    f'frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" '
+                    f'allowfullscreen></iframe>',
+                    height=380,
+                )
+        else:
+            st.video(vid_url)
+    
+    # Full article text
+    if article.full_text and len(article.full_text) > 50:
+        # Format paragraphs
+        paragraphs = article.full_text.split('\n')
+        formatted = []
+        for p in paragraphs:
+            p = p.strip()
+            if p:
+                formatted.append(f'<p style="margin-bottom:1rem;line-height:1.7;color:#374151;font-size:0.95rem;">{_h(p)}</p>')
+        st.markdown("".join(formatted), unsafe_allow_html=True)
+    else:
+        # Fallback to summary
+        if article.summary:
+            st.markdown(f'<p style="line-height:1.7;color:#374151;font-size:0.95rem;">{_h(article.summary)}</p>', unsafe_allow_html=True)
+        else:
+            st.info("Full article text could not be extracted. Click the link below to read on the publisher's site.")
+    
+    # External link button
+    st.link_button(f"🔗 Read on {article.source}", url=article.link, use_container_width=False)
+    st.divider()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  STORY CARD (visual, thumbnail-first)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def render_story_card(story: NewsStory, idx: int):
-    """Render a single news story card with full Ground News-style metadata."""
+    """Render a visual news story card with thumbnail, preview, and expandable reader."""
     
-    # Coverage breakdown text
+    # Pick best thumbnail from any article
+    thumbnail_url = None
+    for a in story.articles:
+        if a.thumbnail:
+            thumbnail_url = a.thumbnail
+            break
+    
+    # Pick lead article (most recent with thumbnail, or just most recent)
+    lead = story.latest_article or story.articles[0]
+    
+    # Coverage breakdown
     cov_parts = []
     if story.coverage_left > 0:
         cov_parts.append(f'<span style="color:{BIAS_COLORS["left"]}">{story.coverage_left}L</span>')
@@ -144,7 +204,7 @@ def render_story_card(story: NewsStory, idx: int):
         cov_parts.append(f'<span style="color:{BIAS_COLORS["center"]}">{story.coverage_center}C</span>')
     if story.coverage_right > 0:
         cov_parts.append(f'<span style="color:{BIAS_COLORS["right"]}">{story.coverage_right}R</span>')
-    coverage_text = " · ".join(cov_parts) if cov_parts else "No coverage"
+    coverage_text = " · ".join(cov_parts) if cov_parts else ""
     
     # Blindspot indicator
     blindspot_html = ""
@@ -178,41 +238,23 @@ def render_story_card(story: NewsStory, idx: int):
         f'{spread_label}</span>'
     )
     
-    # Ownership diversity
+    # Owners
     owners = story.ownership_diversity
     owner_badges = []
-    for owner, count in sorted(owners.items(), key=lambda x: -x[1]):
+    for owner, count in sorted(owners.items(), key=lambda x: -x[1])[:3]:
         owner_badges.append(
             f'<span style="font-size:0.65rem;color:#6B7280;background:#F3F4F6;'
             f'padding:1px 6px;border-radius:2px;border:1px solid #E5E7EB;">'
-            f'{_h(owner[:40])}{" · " + str(count) if count > 1 else ""}</span>'
+            f'{_h(owner[:35])}{" · " + str(count) if count > 1 else ""}</span>'
         )
     
-    # Articles list
-    article_rows = []
-    for a in story.articles:
-        time_str = ""
-        if a.published:
-            delta = datetime.now(a.published.tzinfo or datetime.now().astimezone().tzinfo) - a.published
-            hours = delta.total_seconds() / 3600
-            if hours < 1:
-                time_str = f"{int(delta.total_seconds() / 60)}m"
-            elif hours < 24:
-                time_str = f"{int(hours)}h"
-            else:
-                time_str = f"{int(hours / 24)}d"
-        
-        article_rows.append(
-            f'<a href="{_h(a.link)}" target="_blank" style="display:flex;align-items:center;'
-            f'gap:8px;padding:6px 0;text-decoration:none;border-bottom:1px solid #F3F4F6;'
-            f'onmouseover="this.style.background=\'#F9FAFB\'" onmouseout="this.style.background=\'transparent\'">'
-            f'<span style="font-size:0.75rem;color:#374151;font-weight:500;flex:1;">{_h(a.title[:90])}{"…" if len(a.title) > 90 else ""}</span>'
-            f'<span style="white-space:nowrap;">{_bias_badge_html(a.bias)}</span>'
-            f'<span style="font-size:0.65rem;color:#9CA3AF;min-width:30px;text-align:right;">{time_str}</span>'
-            f'</a>'
-        )
+    # Preview text from lead article
+    preview = lead.summary or ""
+    if not preview and lead.full_text:
+        preview = lead.full_text[:200]
+    preview = preview[:180] + "…" if len(preview) > 180 else preview
     
-    # Topics
+    # Topic pills
     topic_pills = []
     for t in story.topics[:3]:
         topic_pills.append(
@@ -221,48 +263,88 @@ def render_story_card(story: NewsStory, idx: int):
             f'{_h(t)}</span>'
         )
     
+    # Card HTML
     card_html = f"""
-    <div style="background:#FFFCF7;border:1px solid #C8BEB0;border-radius:4px;padding:1.4rem 1.6rem;'
-    margin-bottom:1.2rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);transition:transform 0.2s,box-shadow 0.2s;"
+    <div style="background:#FFFCF7;border:1px solid #C8BEB0;border-radius:4px;margin-bottom:1.2rem;'
+    box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden;"
     onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 4px 12px rgba(0,0,0,0.06)';this.style.borderColor='#B0A494';"
     onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 1px 3px rgba(0,0,0,0.04)';this.style.borderColor='#C8BEB0';">
-        
-        <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:0.6rem;flex-wrap:wrap;">
-            {spread_html}
-            {blindspot_html}
-            <span style="font-size:0.65rem;color:#9CA3AF;margin-left:auto;">{story.coverage_total} sources</span>
-        </div>
-        
-        <div style="font-size:1.15rem;font-weight:600;color:#1A1A1A;line-height:1.35;margin-bottom:0.5rem;letter-spacing:-0.01em;">
-            {_h(story.headline[:140])}{"…" if len(story.headline) > 140 else ""}
-        </div>
-        
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:0.6rem;flex-wrap:wrap;">
-            {" ".join(topic_pills)}
-        </div>
-        
-        <div style="margin-bottom:0.6rem;">
-            {_coverage_bar_html(story)}
-        </div>
-        
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:0.8rem;font-size:0.7rem;color:#6B7280;">
-            <span>{coverage_text}</span>
-            <span style="color:#D1D5DB;">|</span>
-            <span>Factuality: {story.avg_factuality:.0f}/100</span>
-            <span style="color:#D1D5DB;">|</span>
-            <span>{len(story.ownership_diversity)} unique owners</span>
-        </div>
-        
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:0.8rem;">
-            {" ".join(owner_badges[:4])}
-        </div>
-        
-        <div style="border-top:1px solid #F0E8E0;padding-top:0.6rem;">
-            {''.join(article_rows)}
-        </div>
-    </div>
     """
+    
     st.markdown(card_html, unsafe_allow_html=True)
+    
+    # Thumbnail image (Streamlit native for reliability)
+    if thumbnail_url:
+        try:
+            st.image(thumbnail_url, use_container_width=True)
+        except Exception:
+            pass
+    
+    # Card content padding
+    st.markdown("""
+    <div style="padding:1.2rem 1.4rem;">
+    """, unsafe_allow_html=True)
+    
+    # Meta row
+    st.markdown(f"""
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:0.5rem;flex-wrap:wrap;">
+        {spread_html}
+        {blindspot_html}
+        <span style="font-size:0.65rem;color:#9CA3AF;margin-left:auto;">{story.coverage_total} sources</span>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Headline
+    st.markdown(f"""
+    <div style="font-size:1.25rem;font-weight:600;color:#1A1A1A;line-height:1.35;margin-bottom:0.4rem;letter-spacing:-0.01em;">
+        {_h(story.headline[:140])}{"…" if len(story.headline) > 140 else ""}
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Topics
+    if topic_pills:
+        st.markdown(f'<div style="display:flex;align-items:center;gap:6px;margin-bottom:0.5rem;flex-wrap:wrap;">{" ".join(topic_pills)}</div>', unsafe_allow_html=True)
+    
+    # Preview text
+    if preview:
+        st.markdown(f'<p style="font-size:0.9rem;color:#5A5048;line-height:1.6;margin-bottom:0.6rem;">{_h(preview)}</p>', unsafe_allow_html=True)
+    
+    # Coverage bar
+    st.markdown(f'<div style="margin-bottom:0.4rem;">{_coverage_bar_html(story)}</div>', unsafe_allow_html=True)
+    
+    # Footer meta
+    st.markdown(f"""
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:0.6rem;font-size:0.7rem;color:#6B7280;flex-wrap:wrap;">
+        <span>{coverage_text}</span>
+        <span style="color:#D1D5DB;">|</span>
+        <span>Factuality: {story.avg_factuality:.0f}/100</span>
+        <span style="color:#D1D5DB;">|</span>
+        <span>{len(story.ownership_diversity)} owners</span>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Owner badges
+    if owner_badges:
+        st.markdown(f'<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:0.8rem;">{" ".join(owner_badges)}</div>', unsafe_allow_html=True)
+    
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Article reader expanders
+    if len(story.articles) == 1:
+        # Single article — show reader directly with a toggle
+        key = f"read_{story.story_id}_{idx}"
+        if st.button(f"📰 Read full article from {story.articles[0].source}", key=key, use_container_width=True):
+            st.session_state[f"show_{key}"] = not st.session_state.get(f"show_{key}", False)
+        if st.session_state.get(f"show_{key}", False):
+            render_article_reader(story.articles[0], idx)
+    else:
+        # Multiple articles — one expander per source
+        for a_idx, article in enumerate(story.articles):
+            exp_key = f"article_{story.story_id}_{idx}_{a_idx}"
+            with st.expander(f"📰 Read from {article.source} ({BIAS_LABELS.get(article.bias, article.bias)})", expanded=False):
+                render_article_reader(article, idx * 100 + a_idx)
+    
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -270,14 +352,6 @@ def render_story_card(story: NewsStory, idx: int):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def render_stats_dashboard(coverage: dict):
-    """Render the coverage statistics row."""
-    total = coverage.get("total_stories", 0)
-    blindspots = coverage.get("blindspots", 0)
-    full_spec = coverage.get("full_spectrum", 0)
-    left_a = coverage.get("left_articles", 0)
-    center_a = coverage.get("center_articles", 0)
-    right_a = coverage.get("right_articles", 0)
-    
     st.markdown("""
     <style>
     .news-stat-box {
@@ -305,12 +379,12 @@ def render_stats_dashboard(coverage: dict):
     
     c1, c2, c3, c4, c5, c6 = st.columns(6)
     stats = [
-        (c1, str(total), "Stories"),
-        (c2, str(blindspots), "Blindspots"),
-        (c3, str(full_spec), "Full Spectrum"),
-        (c4, str(left_a), "Left Articles"),
-        (c5, str(center_a), "Center Articles"),
-        (c6, str(right_a), "Right Articles"),
+        (c1, str(coverage.get("total_stories", 0)), "Stories"),
+        (c2, str(coverage.get("blindspots", 0)), "Blindspots"),
+        (c3, str(coverage.get("full_spectrum", 0)), "Full Spectrum"),
+        (c4, str(coverage.get("left_articles", 0)), "Left Articles"),
+        (c5, str(coverage.get("center_articles", 0)), "Center Articles"),
+        (c6, str(coverage.get("right_articles", 0)), "Right Articles"),
     ]
     for col, num, label in stats:
         with col:
@@ -328,7 +402,6 @@ def render_stats_dashboard(coverage: dict):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def render_source_legend():
-    """Render the bias/factuality legend in the sidebar."""
     st.markdown("""
     <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid #9E9486;">
         <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.14em;color:#5A5048;margin-bottom:0.8rem;font-weight:600;">
@@ -381,8 +454,6 @@ def render_source_legend():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def render_news_tab():
-    """Render the complete News tab interface."""
-    
     st.markdown("""
     <div style="text-align:center;padding:2rem 0 1.5rem 0;margin-bottom:1.5rem;
     background:linear-gradient(180deg, rgba(255,252,247,0.35) 0%, rgba(255,252,247,0) 100%);border-radius:4px;">
@@ -390,12 +461,11 @@ def render_news_tab():
             Irina's Newsroom
         </div>
         <div style="font-size:0.8rem;color:#5A5048;letter-spacing:0.04em;">
-            See every side of every story · Bias · Ownership · Factuality
+            Read every side of every story · Bias · Ownership · Factuality
         </div>
     </div>
     """, unsafe_allow_html=True)
     
-    # Filter controls
     col1, col2, col3, col4, col5 = st.columns([2, 1.5, 1.5, 1.5, 1])
     
     with col1:
@@ -435,19 +505,17 @@ def render_news_tab():
         st.write("")
         refresh = st.button("⟳ Refresh", key="news_refresh", use_container_width=True)
     
-    # Determine parameters
     topic = None if topic_filter == "All" else topic_filter.lower()
     bias_map = {
         "All coverage": None,
         "Left only": "left",
         "Center only": "center",
         "Right only": "right",
-        "Blindspots": None,  # handled separately
+        "Blindspots": None,
     }
     bias = bias_map.get(bias_filter)
     blindspots_only = bias_filter == "Blindspots"
     
-    # Fetch
     with st.spinner(random.choice([
         "📡 Scanning the airwaves...",
         "📰 Gathering headlines...",
@@ -471,11 +539,9 @@ def render_news_tab():
     
     stories = result.stories
     
-    # Apply search filter
     if search_query.strip():
         stories = search_news_stories(stories, search_query.strip())
     
-    # Apply sort
     if sort_by == "Most coverage":
         stories.sort(key=lambda s: s.coverage_total, reverse=True)
     elif sort_by == "Blindspots first":
@@ -483,7 +549,6 @@ def render_news_tab():
     elif sort_by == "Full spectrum":
         stories.sort(key=lambda s: (s.bias_spread == "full_spectrum", s.coverage_total), reverse=True)
     
-    # Stats
     coverage_stats = analyze_coverage(stories if stories else result.stories)
     render_stats_dashboard(coverage_stats)
     
@@ -508,11 +573,9 @@ def render_news_tab():
         """, unsafe_allow_html=True)
         return
     
-    # Render story cards
     for idx, story in enumerate(stories):
         render_story_card(story, idx)
     
-    # Source transparency footer
     with st.expander("ℹ️ About source ratings & methodology"):
         st.markdown("""
         **Bias ratings** are aggregated from independent media monitoring organizations including 
@@ -523,11 +586,13 @@ def render_news_tab():
         **Factuality scores** estimate a source's track record for factual reporting based on 
         correction rates, use of loaded language, and transparency about sources/methodology.
         
-        **Ownership** reveals the parent company or controlling entity behind each outlet — 
-        because who owns the news matters.
+        **Ownership** reveals the parent company or controlling entity behind each outlet.
         
         **Blindspots** are stories receiving lopsided coverage (predominantly from one ideological side). 
         They highlight potential media gaps and filter bubbles.
+        
+        **Full article text** is extracted automatically from publisher websites for your convenience. 
+        Always verify important information against the original source.
         
         *This is a transparency tool, not a fact-checker. Always read multiple sources.*
         """)

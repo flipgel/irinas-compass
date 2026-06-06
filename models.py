@@ -26,6 +26,10 @@ class NewsArticle:
     source: str
     published: Optional[datetime] = None
     summary: Optional[str] = None
+    thumbnail: Optional[str] = None
+    full_text: Optional[str] = None
+    article_images: List[str] = field(default_factory=list)
+    video_urls: List[str] = field(default_factory=list)
     bias: str = "unknown"
     bias_score: int = 0
     factuality: str = "unknown"

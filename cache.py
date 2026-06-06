@@ -59,6 +59,16 @@ def _ensure_db():
             fetched_at TEXT
         )
     """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS article_cache (
+            url TEXT PRIMARY KEY,
+            title TEXT,
+            full_text TEXT,
+            images TEXT,
+            videos TEXT,
+            fetched_at TEXT
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -298,6 +308,47 @@ def save_news_cache(cache_key: str, result: NewsResult):
     c.execute(
         "INSERT OR REPLACE INTO news_cache (cache_key, data, fetched_at) VALUES (?, ?, ?)",
         (cache_key, payload, datetime.now().isoformat()),
+    )
+    conn.commit()
+    conn.close()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  ARTICLE CACHE (short TTL for full text)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+ARTICLE_CACHE_TTL_HOURS = 6
+
+
+def get_article_cache(url: str) -> Optional[dict]:
+    """Retrieve cached full article if not expired."""
+    _ensure_db()
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT title, full_text, images, videos, fetched_at FROM article_cache WHERE url = ?", (url,))
+    row = c.fetchone()
+    conn.close()
+    if not row:
+        return None
+    fetched_at = datetime.fromisoformat(row[4]) if row[4] else None
+    if fetched_at and datetime.now() - fetched_at > timedelta(hours=ARTICLE_CACHE_TTL_HOURS):
+        return None
+    return {
+        "title": row[0],
+        "full_text": row[1],
+        "images": json.loads(row[2] or "[]"),
+        "videos": json.loads(row[3] or "[]"),
+    }
+
+
+def save_article_cache(url: str, title: str, full_text: str, images: List[str], videos: List[str]):
+    """Save full article to cache."""
+    _ensure_db()
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute(
+        "INSERT OR REPLACE INTO article_cache (url, title, full_text, images, videos, fetched_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (url, title, full_text, json.dumps(images), json.dumps(videos), datetime.now().isoformat()),
     )
     conn.commit()
     conn.close()
